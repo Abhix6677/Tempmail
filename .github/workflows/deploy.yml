@@ -104,7 +104,7 @@ jobs:
           FTP_USER_SHORT=$(echo "$FTP_USERNAME" | sed 's/@.*//')
           echo "Trying username: $FTP_USER_SHORT (short) and $FTP_USERNAME (full)"
 
-          # Try approach 1: Short username via lftp
+          # Try short username via lftp (skip chmod - it always fails on shared hosting)
           echo "=== Attempt 1: Short username via lftp ==="
           lftp -u "$FTP_USER_SHORT","$FTP_PASSWORD" "$FTP_HOST" -e "
             set ftp:ssl-allow no
@@ -112,14 +112,14 @@ jobs:
             set ftp:passive-mode yes
             set ftp:fix-pasv-address no
             set net:connection-limit 3
+            set mirror:no-empty-dirs true
             cd $FTP_REMOTE_PATH
-            # Step 1: Upload all code EXCEPT vendor (fast, few files)
-            mirror --reverse --delete --parallel=3 \
+            # Upload all code (EXCEPT vendor - upload separately)
+            mirror --reverse --delete --parallel=3 --no-perms \
               --exclude .git \
               --exclude .github \
               --exclude node_modules \
               --exclude vendor \
-              --exclude vendor.tar.gz \
               --exclude .env.example \
               --exclude .env.production \
               --exclude 'test_*.php' \
@@ -134,13 +134,11 @@ jobs:
               --exclude 'storage/framework/cache/*' \
               --exclude 'storage/framework/sessions/*' \
               . .
-            echo "=== Code uploaded, now uploading vendor.tar.gz ==="
-            # Step 2: Upload vendor.tar.gz as single file
-            put vendor.tar.gz
-            echo "=== vendor.tar.gz uploaded! ==="
+            echo "=== Code uploaded ==="
             quit
           " && echo "SUCCESS with short username!" && exit 0
 
+          # Fallback: full username (with --no-perms to skip chmod)
           echo "=== Attempt 2: Full username via lftp ==="
           lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_HOST" -e "
             set ftp:ssl-allow no
@@ -148,14 +146,13 @@ jobs:
             set ftp:passive-mode yes
             set ftp:fix-pasv-address no
             set net:connection-limit 3
+            set mirror:no-empty-dirs true
             cd $FTP_REMOTE_PATH
-            # Step 1: Upload all code except vendor
-            mirror --reverse --delete --parallel=3 \
+            mirror --reverse --delete --parallel=3 --no-perms \
               --exclude .git \
               --exclude .github \
               --exclude node_modules \
               --exclude vendor \
-              --exclude vendor.tar.gz \
               --exclude .env.example \
               --exclude .env.production \
               --exclude 'test_*.php' \
@@ -170,9 +167,7 @@ jobs:
               --exclude 'storage/framework/cache/*' \
               --exclude 'storage/framework/sessions/*' \
               . .
-            echo "=== Code uploaded, now uploading vendor.tar.gz ==="
-            put vendor.tar.gz
-            echo "=== vendor.tar.gz uploaded! ==="
+            echo "=== Code uploaded ==="
             quit
           " && echo "SUCCESS with full username!" && exit 0
 
