@@ -1,4 +1,4 @@
-name: Deploy to GoogieHost
+name: Deploy to AlchHosting
 
 on:
   push:
@@ -43,26 +43,20 @@ jobs:
       - name: Build frontend assets
         run: npm run build
 
-      - name: Create .env file
+      - name: Create .env file for production (MySQL)
         run: |
           cp .env.example .env
           sed -i "s|APP_KEY=|APP_KEY=${{ secrets.APP_KEY }}|g" .env
           sed -i "s|APP_URL=.*|APP_URL=${{ secrets.APP_URL }}|g" .env
+          sed -i "s|APP_ENV=.*|APP_ENV=production|g" .env
           sed -i "s|APP_DEBUG=.*|APP_DEBUG=false|g" .env
-          sed -i "s|SESSION_DOMAIN=.*|SESSION_DOMAIN=${{ secrets.SESSION_DOMAIN }}|g" .env
-          sed -i "s|MAIL_FROM_ADDRESS=.*|MAIL_FROM_ADDRESS=${{ secrets.MAIL_FROM_ADDRESS }}|g" .env
-          # Ensure SQLite config: force DB_CONNECTION=sqlite and remove any MySQL vars
-          sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=sqlite|" .env
-          sed -i "/^# *DB_HOST=/d" .env
-          sed -i "/^# *DB_PORT=/d" .env
-          sed -i "/^# *DB_DATABASE=/d" .env
-          sed -i "/^# *DB_USERNAME=/d" .env
-          sed -i "/^# *DB_PASSWORD=/d" .env
-          sed -i "/^DB_HOST=/d" .env
-          sed -i "/^DB_PORT=/d" .env
-          sed -i "/^DB_DATABASE=/d" .env
-          sed -i "/^DB_USERNAME=/d" .env
-          sed -i "/^DB_PASSWORD=/d" .env
+          # MySQL configuration for AlchHosting
+          sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=mysql|" .env
+          sed -i "s|# *DB_HOST=.*|DB_HOST=${{ secrets.DB_HOST }}|" .env
+          sed -i "s|# *DB_PORT=.*|DB_PORT=3306|" .env
+          sed -i "s|# *DB_DATABASE=.*|DB_DATABASE=${{ secrets.DB_DATABASE }}|" .env
+          sed -i "s|# *DB_USERNAME=.*|DB_USERNAME=${{ secrets.DB_USERNAME }}|" .env
+          sed -i "s|# *DB_PASSWORD=.*|DB_PASSWORD=${{ secrets.DB_PASSWORD }}|" .env
           echo "--- .env DB section ---"
           grep "^DB_" .env || true
           echo "--- APP_DEBUG ---"
