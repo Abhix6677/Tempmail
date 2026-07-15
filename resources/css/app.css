@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+[x-cloak] {
+    display: none;
+}
+
+.pause-spinner {
+    animation-play-state: paused;
+}
+
+.toggle-path {
+    transition: all 0.3s ease-in-out;
+}
+.toggle-circle {
+    top: 0.2rem;
+    left: 0.25rem;
+    transition: all 0.3s ease-in-out;
+}
+input:checked ~ .toggle-circle {
+    transform: translateX(100%);
+}
+input:checked ~ .toggle-path {
+    background-color: #6875f5;
+}
+.striped-img-preview {
+    color: white;
+    background: repeating-linear-gradient(45deg, #eeeeee, #eeeeee 5px, #cccccc 5px, #cccccc 10px);
+}
+.disabled-section {
+    background: repeating-linear-gradient(45deg, #eeeeee, #eeeeee 5px, #dddddd 5px, #dddddd 10px);
+}
+input.form-input,
+select.form-input {
+    border-width: 1px;
+}
+input[type="file"]::file-selector-button {
+    background: #ddd;
+    font-size: 0.9rem;
+    padding: 0.25rem 0.75rem;
+    border: 0;
+    border-radius: 0.375rem;
+}
+
+.hgi-spin {
+    animation: rotation infinite 1.5s linear;
+}
+
+.tox .tox-promotion,
+.tox-statusbar__branding {
+    display: none;
+}
+
+.tox .tox-dialog-wrap__backdrop {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    backdrop-filter: blur(4px);
+}
+
+.swal2-backdrop-show {
+    backdrop-filter: blur(4px);
+}
+
+.swal2-modal {
+    border-radius: 1rem;
+    padding-bottom: 2rem;
+}
+
+.swal2-modal .swal2-title {
+    font-size: 1.25rem;
+}
+
+.swal2-modal .swal2-html-container {
+    font-size: 1rem;
+}
+
+.swal2-modal .swal2-actions button {
+    border-radius: 0.375rem;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+@keyframes rotation {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+html[data-mode="dark"] .striped-img-preview {
+    color: #111827;
+    background: repeating-linear-gradient(45deg, #111, #111 5px, #222 5px, #222 10px);
+}
+
+html[data-mode="dark"] .disabled-section {
+    background: repeating-linear-gradient(45deg, #111, #111 5px, #333 5px, #333 10px);
+}
+
+html[data-mode="dark"] input[type="file"]::file-selector-button {
+    background: #111827;
+    color: #fff;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-thin::-webkit-scrollbar {
+    width: 0 !important;
+    background: transparent !important;
+}
+/* Hide scrollbar for Firefox */
+.scrollbar-thin {
+    scrollbar-width: none !important;
+}

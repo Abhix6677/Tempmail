@@ -1,0 +1,190 @@
+name: Deploy to GoogieHost
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create required directories
+        run: |
+          mkdir -p bootstrap/cache
+          mkdir -p storage/framework/cache
+          mkdir -p storage/framework/sessions
+          mkdir -p storage/framework/views
+          mkdir -p storage/logs
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, ctype, json, bcmath, pdo, pdo_mysql, imap
+          coverage: none
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install PHP dependencies
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Create .env file
+        run: |
+          cp .env.example .env
+          sed -i "s|APP_KEY=|APP_KEY=${{ secrets.APP_KEY }}|g" .env
+          sed -i "s|APP_URL=.*|APP_URL=${{ secrets.APP_URL }}|g" .env
+          sed -i "s|APP_DEBUG=.*|APP_DEBUG=false|g" .env
+          sed -i "s|SESSION_DOMAIN=.*|SESSION_DOMAIN=${{ secrets.SESSION_DOMAIN }}|g" .env
+          sed -i "s|MAIL_FROM_ADDRESS=.*|MAIL_FROM_ADDRESS=${{ secrets.MAIL_FROM_ADDRESS }}|g" .env
+          # Ensure SQLite config: force DB_CONNECTION=sqlite and remove any MySQL vars
+          sed -i "s|^DB_CONNECTION=.*|DB_CONNECTION=sqlite|" .env
+          sed -i "/^# *DB_HOST=/d" .env
+          sed -i "/^# *DB_PORT=/d" .env
+          sed -i "/^# *DB_DATABASE=/d" .env
+          sed -i "/^# *DB_USERNAME=/d" .env
+          sed -i "/^# *DB_PASSWORD=/d" .env
+          sed -i "/^DB_HOST=/d" .env
+          sed -i "/^DB_PORT=/d" .env
+          sed -i "/^DB_DATABASE=/d" .env
+          sed -i "/^DB_USERNAME=/d" .env
+          sed -i "/^DB_PASSWORD=/d" .env
+          echo "--- .env DB section ---"
+          grep "^DB_" .env || true
+          echo "--- APP_DEBUG ---"
+          grep "^APP_DEBUG" .env || true
+
+      - name: Generate APP_KEY if empty
+        run: |
+          if [ -z "${{ secrets.APP_KEY }}" ]; then
+            php artisan key:generate --force
+            grep "^APP_KEY=" .env
+          fi
+
+      - name: Remove test/dev files to save space
+        run: |
+          rm -rf node_modules .git .github
+          rm -f test_*.php check_settings.php page.html
+          rm -f TEST_REPORT.md PROJECT_STATUS.md DEPLOYMENT_GUIDE.md
+          rm -f .env.example .env.production
+
+      - name: Setup lftp
+        run: sudo apt-get update -o Acquire::AllowInsecureRepositories=true || true && sudo apt-get install -y --allow-unauthenticated lftp
+
+      - name: Debug FTP credentials
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_REMOTE_PATH: ${{ secrets.FTP_REMOTE_PATH }}
+        run: |
+          echo "FTP_HOST: $FTP_HOST"
+          echo "FTP_USERNAME: $FTP_USERNAME"
+          echo "FTP_REMOTE_PATH: $FTP_REMOTE_PATH"
+          echo "FTP_USERNAME length: ${#FTP_USERNAME}"
+
+      - name: Deploy via FTP
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_REMOTE_PATH: ${{ secrets.FTP_REMOTE_PATH }}
+        run: |
+          # Strip the @domain suffix if present - DirectAdmin may use short username
+          FTP_USER_SHORT=$(echo "$FTP_USERNAME" | sed 's/@.*//')
+          echo "Trying username: $FTP_USER_SHORT (short) and $FTP_USERNAME (full)"
+
+          # Try approach 1: lftp with -u flag and short username
+          echo "=== Attempt 1: Short username via lftp -u ==="
+          lftp -u "$FTP_USER_SHORT","$FTP_PASSWORD" "$FTP_HOST" -e "
+            set ftp:ssl-allow no
+            set net:timeout 30
+            set ftp:passive-mode yes
+            set ftp:fix-pasv-address no
+            cd $FTP_REMOTE_PATH
+            mirror --reverse --verbose --delete --only-newer \
+              --exclude .git \
+              --exclude .github \
+              --exclude node_modules \
+              --exclude .env.example \
+              --exclude .env.production \
+              --exclude 'test_*.php' \
+              --exclude check_settings.php \
+              --exclude page.html \
+              --exclude TEST_REPORT.md \
+              --exclude PROJECT_STATUS.md \
+              --exclude DEPLOYMENT_GUIDE.md \
+              --exclude storage/installed \
+              --exclude 'database/database.sqlite' \
+              --exclude 'storage/logs/*' \
+              --exclude 'storage/framework/cache/*' \
+              --exclude 'storage/framework/sessions/*' \
+              . .
+            quit
+          " && echo "SUCCESS with short username!" && exit 0
+
+          echo "=== Attempt 2: Full username via lftp -u ==="
+          lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_HOST" -e "
+            set ftp:ssl-allow no
+            set net:timeout 30
+            set ftp:passive-mode yes
+            set ftp:fix-pasv-address no
+            cd $FTP_REMOTE_PATH
+            mirror --reverse --verbose --delete --only-newer \
+              --exclude .git \
+              --exclude .github \
+              --exclude node_modules \
+              --exclude .env.example \
+              --exclude .env.production \
+              --exclude 'test_*.php' \
+              --exclude check_settings.php \
+              --exclude page.html \
+              --exclude TEST_REPORT.md \
+              --exclude PROJECT_STATUS.md \
+              --exclude DEPLOYMENT_GUIDE.md \
+              --exclude storage/installed \
+              --exclude 'database/database.sqlite' \
+              --exclude 'storage/logs/*' \
+              --exclude 'storage/framework/cache/*' \
+              --exclude 'storage/framework/sessions/*' \
+              . .
+            quit
+          " && echo "SUCCESS with full username!" && exit 0
+
+          echo "=== Attempt 3: curl FTP upload ==="
+          curl -v --ftp-create-dirs --ssl-allow-beast \
+            -u "$FTP_USERNAME:$FTP_PASSWORD" \
+            --ftp-pasv \
+            -r 0 \
+            "ftp://$FTP_HOST/$FTP_REMOTE_PATH/" && echo "curl connected!" || echo "curl also failed"
+
+          echo "=== All attempts failed ==="
+          exit 1
+
+      - name: Clear remote cache (post-deploy)
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_REMOTE_PATH: ${{ secrets.FTP_REMOTE_PATH }}
+        run: |
+          lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_HOST" -e "
+            set ftp:ssl-allow no
+            set net:timeout 15
+            set ftp:passive-mode yes
+            set net:max-retries 2
+            cd $FTP_REMOTE_PATH && rm -f bootstrap/cache/*.php; bye
+          " || true

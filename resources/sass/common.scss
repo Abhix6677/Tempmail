@@ -1,0 +1,264 @@
+.reset * {
+    all: revert;
+}
+
+.pause-spinner {
+    animation-play-state: paused;
+}
+
+.bg-primary {
+    background-color: var(--primary);
+}
+.text-primary {
+    color: var(--primary);
+}
+.border-primary {
+    border-color: var(--primary);
+}
+
+.bg-secondary {
+    background-color: var(--secondary);
+}
+.text-secondary {
+    color: var(--secondary);
+}
+.border-secondary {
+    border-color: var(--secondary);
+}
+
+.bg-tertiary {
+    background-color: var(--tertiary);
+}
+.text-tertiary {
+    color: var(--tertiary);
+}
+.border-tertiary {
+    border-color: var(--tertiary);
+}
+
+.page,
+.post article {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    ul,
+    ol,
+    li {
+        all: revert;
+    }
+}
+
+#blogs article h4 {
+    margin: 0;
+}
+
+.groot-theme div.in-app-page #blogs .bg-gray-100 {
+    background: #fff;
+}
+
+.adsbygoogle {
+    min-width: 250px;
+}
+
+.groot-theme,
+.nebula-theme {
+    .adz-two,
+    .adz-three {
+        .adsbygoogle {
+            min-width: 200px;
+        }
+    }
+}
+
+html {
+    :not(h1, h2, h3, h4, h5, h6) {
+        font-family: var(--body-font), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+            "Segoe UI Symbol", "Noto Color Emoji";
+    }
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-family: var(--head-font), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+            "Segoe UI Symbol", "Noto Color Emoji" !important;
+        & > * {
+            font-family: var(--head-font), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+                "Segoe UI Symbol", "Noto Color Emoji" !important;
+        }
+    }
+}
+
+.has-tooltip .tooltip {
+    position: absolute;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: all 0.3s;
+    background: #000;
+    color: #fff;
+    padding: 5px 10px;
+    font-size: 0.75em;
+    border-radius: 0.5em;
+}
+
+.has-tooltip .tooltip::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: black transparent transparent transparent;
+    transform: rotate(180deg);
+}
+
+.has-tooltip:hover .tooltip {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(50px);
+}
+
+.has-tooltip.relative .tooltip {
+    top: -2em;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+}
+
+@media only screen and (min-width: 400px) and (max-width: 1024px) {
+    html {
+        font-size: 15px;
+    }
+}
+@media only screen and (max-width: 400px) {
+    html {
+        font-size: 13px;
+    }
+}
+
+/* Overrides to fix blue-background takeover and responsive layout issues
+   - Reduce excessive header bottom padding that made header occupy too much vertical space
+   - Neutralize full-page min-height on theme wrappers for small screens
+   - Remove aggressive negative margins on content containers for small screens
+   - Add responsive padding for main content and ensure modals sit above backgrounds
+*/
+
+/* Reduce header padding (overrides classes like pb-24) so header doesn't dominate the page */
+.nebula-theme > header,
+.default-theme > header,
+.mantis-theme > header {
+    padding-bottom: 1rem !important; /* small screens: compact header */
+}
+
+/* Restore bigger header spacing on medium+ screens where design expects it */
+@media (min-width: 768px) {
+    .nebula-theme > header,
+    .default-theme > header,
+    .mantis-theme > header {
+        padding-bottom: 3rem !important; /* approximates pb-12 / pb-24 behavior on larger screens */
+    }
+}
+
+/* Prevent theme root wrappers from forcing the entire page background via min-h-screen on small screens */
+.nebula-theme,
+.default-theme,
+.mantis-theme {
+    min-height: auto !important;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Override aggressive negative margins applied to the main content wrapper so the white card is not pulled out of flow on mobile */
+.nebula-theme .grow.container,
+.default-theme .grow.container,
+.mantis-theme .grow.container {
+    margin-top: 0 !important; /* neutralize -mt-16 */
+    margin-bottom: 0 !important; /* neutralize -mb-16 */
+    border-radius: 0.375rem; /* md:rounded-md fallback */
+    padding: 0.75rem !important; /* give content breathing room on small screens */
+}
+
+@media (min-width: 768px) {
+    .nebula-theme .grow.container,
+    .default-theme .grow.container,
+    .mantis-theme .grow.container {
+        margin-top: -4rem !important; /* keep the overlapping card effect on larger screens */
+        margin-bottom: -4rem !important;
+        padding: 1rem !important;
+    }
+}
+
+/* HARD CONSTRAINT: prevent header from stretching to viewport height */
+.nebula-theme > header,
+.default-theme > header,
+.mantis-theme > header {
+    height: auto !important;
+    min-height: unset !important;
+    flex: 0 0 auto !important; /* stop flex-grow behavior */
+}
+
+/* Ensure main content occupies remaining space instead of header */
+.nebula-theme > .grow,
+.default-theme > .grow,
+.mantis-theme > .grow {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+}
+
+/* Ensure modals and overlays appear above background layers */
+.jetstream-modal {
+    z-index: 9999 !important;
+}
+
+/* Prevent any accidental full-page blue background by forcing base backgrounds to be neutral unless explicitly set */
+html,
+body {
+    background-color: transparent !important;
+}
+
+/* Improve contrast for header text (in case custom colors are misconfigured) */
+.nebula-theme > header,
+.default-theme > header,
+.mantis-theme > header {
+    color: #ffffff !important;
+}
+
+/* Make sure fixed full-screen fallback blocks don't overflow on smaller viewports */
+.fixed.w-screen.h-screen {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100vh !important;
+}
+
+/* Provide safe, responsive horizontal padding for container elements */
+.container.mx-auto.p-5,
+.container.mx-auto.p-6,
+.container.mx-auto.p-8,
+.container.mx-auto.p-4 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+}
+
+/* Utility: reduce overly-dominant background utility classes on very small screens */
+@media (max-width: 640px) {
+    /* Tame very large header backgrounds on tiny viewports */
+    .nebula-theme > header,
+    .default-theme > header,
+    .mantis-theme > header {
+        padding-bottom: 0.75rem !important;
+    }
+}
