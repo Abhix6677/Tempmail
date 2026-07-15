@@ -276,24 +276,11 @@ class AppController extends Controller {
      * Ensure symlinks for themes and storage exist.
      */
     private function checkLinking() {
-        $symlinks = [
-            'themes' => public_path('themes'),
-            'storage' => public_path('storage'),
-        ];
-
-        $needsLinking = false;
-
-        foreach ($symlinks as $path) {
-            if (!file_exists($path) || !is_link($path)) {
-                if (file_exists($path)) {
-                    is_dir($path) ? File::deleteDirectory($path) : File::delete($path);
-                }
-                $needsLinking = true;
-            }
+        if (!file_exists(public_path('storage'))) {
+            File::copyDirectory(storage_path('app/public'), public_path('storage'));
         }
-
-        if ($needsLinking) {
-            Artisan::call('storage:link');
+        if (!file_exists(public_path('themes'))) {
+            File::copyDirectory(resource_path('views/frontend/themes'), public_path('themes'));
         }
     }
 
