@@ -112,7 +112,7 @@ jobs:
             set ftp:passive-mode yes
             set ftp:fix-pasv-address no
             set net:connection-limit 3
-            cd \$FTP_REMOTE_PATH
+            cd $FTP_REMOTE_PATH
             # Step 1: Upload all code EXCEPT vendor (fast, few files)
             mirror --reverse --delete --parallel=3 \
               --exclude .git \
@@ -148,7 +148,7 @@ jobs:
             set ftp:passive-mode yes
             set ftp:fix-pasv-address no
             set net:connection-limit 3
-            cd \$FTP_REMOTE_PATH
+            cd $FTP_REMOTE_PATH
             # Step 1: Upload all code except vendor
             mirror --reverse --delete --parallel=3 \
               --exclude .git \
