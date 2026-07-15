@@ -69,12 +69,15 @@ jobs:
             grep "^APP_KEY=" .env
           fi
 
-      - name: Remove test/dev files to save space
+      - name: Remove test/dev files and create vendor archive
         run: |
           rm -rf node_modules .git .github
           rm -f test_*.php check_settings.php page.html
           rm -f TEST_REPORT.md PROJECT_STATUS.md DEPLOYMENT_GUIDE.md
           rm -f .env.example .env.production
+          # Create vendor.tar.gz for faster FTP upload (single file instead of 10k files)
+          cd vendor && tar czf ../vendor.tar.gz . && cd ..
+          ls -lh vendor.tar.gz
 
       - name: Setup lftp
         run: sudo apt-get update -o Acquire::AllowInsecureRepositories=true || true && sudo apt-get install -y --allow-unauthenticated lftp
@@ -101,18 +104,22 @@ jobs:
           FTP_USER_SHORT=$(echo "$FTP_USERNAME" | sed 's/@.*//')
           echo "Trying username: $FTP_USER_SHORT (short) and $FTP_USERNAME (full)"
 
-          # Try approach 1: lftp with -u flag and short username
-          echo "=== Attempt 1: Short username via lftp -u ==="
+          # Try approach 1: Short username via lftp
+          echo "=== Attempt 1: Short username via lftp ==="
           lftp -u "$FTP_USER_SHORT","$FTP_PASSWORD" "$FTP_HOST" -e "
             set ftp:ssl-allow no
-            set net:timeout 30
+            set net:timeout 60
             set ftp:passive-mode yes
             set ftp:fix-pasv-address no
-            cd $FTP_REMOTE_PATH
-            mirror --reverse --verbose --delete --only-newer \
+            set net:connection-limit 3
+            cd \$FTP_REMOTE_PATH
+            # Step 1: Upload all code EXCEPT vendor (fast, few files)
+            mirror --reverse --delete --parallel=3 \
               --exclude .git \
               --exclude .github \
               --exclude node_modules \
+              --exclude vendor \
+              --exclude vendor.tar.gz \
               --exclude .env.example \
               --exclude .env.production \
               --exclude 'test_*.php' \
@@ -127,20 +134,28 @@ jobs:
               --exclude 'storage/framework/cache/*' \
               --exclude 'storage/framework/sessions/*' \
               . .
+            echo "=== Code uploaded, now uploading vendor.tar.gz ==="
+            # Step 2: Upload vendor.tar.gz as single file
+            put vendor.tar.gz
+            echo "=== vendor.tar.gz uploaded! ==="
             quit
           " && echo "SUCCESS with short username!" && exit 0
 
-          echo "=== Attempt 2: Full username via lftp -u ==="
+          echo "=== Attempt 2: Full username via lftp ==="
           lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_HOST" -e "
             set ftp:ssl-allow no
-            set net:timeout 30
+            set net:timeout 60
             set ftp:passive-mode yes
             set ftp:fix-pasv-address no
-            cd $FTP_REMOTE_PATH
-            mirror --reverse --verbose --delete --only-newer \
+            set net:connection-limit 3
+            cd \$FTP_REMOTE_PATH
+            # Step 1: Upload all code except vendor
+            mirror --reverse --delete --parallel=3 \
               --exclude .git \
               --exclude .github \
               --exclude node_modules \
+              --exclude vendor \
+              --exclude vendor.tar.gz \
               --exclude .env.example \
               --exclude .env.production \
               --exclude 'test_*.php' \
@@ -155,6 +170,9 @@ jobs:
               --exclude 'storage/framework/cache/*' \
               --exclude 'storage/framework/sessions/*' \
               . .
+            echo "=== Code uploaded, now uploading vendor.tar.gz ==="
+            put vendor.tar.gz
+            echo "=== vendor.tar.gz uploaded! ==="
             quit
           " && echo "SUCCESS with full username!" && exit 0
 
