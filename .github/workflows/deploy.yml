@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      clean_only:
+        description: 'Delete all files in public_html without uploading a new build'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   deploy:
@@ -47,10 +53,8 @@ jobs:
           </IfModule>
           EOF
 
-      - name: Create clean placeholder
-        run: |
-          mkdir -p .clean_placeholder
-          echo "clean deploy" > .clean_placeholder/placeholder.txt
+      - name: Create empty clean directory
+        run: mkdir -p .clean_directory
 
       - name: Clean server (delete old files)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -60,10 +64,11 @@ jobs:
           username: Tempumail@tempumail.cu.ma
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: /public_html/
-          local-dir: ./.clean_placeholder/
+          local-dir: ./.clean_directory/
           dangerous-clean-slate: true
 
       - name: Deploy to server via FTP
+        if: ${{ !inputs.clean_only }}
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: tempumail.cu.ma
@@ -77,7 +82,7 @@ jobs:
             .git/**
             **/.github/**
             .github/**
-            .clean_placeholder/**
+            .clean_directory/**
             node_modules/**
             tests/**
             *.md
