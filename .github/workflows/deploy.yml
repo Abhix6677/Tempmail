@@ -47,6 +47,11 @@ jobs:
           </IfModule>
           EOF
 
+      - name: Create clean placeholder
+        run: |
+          mkdir -p .clean_placeholder
+          echo "clean deploy" > .clean_placeholder/placeholder.txt
+
       - name: Clean server (delete old files)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -54,12 +59,8 @@ jobs:
           username: Tempumail@tempumail.cu.ma
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: /public_html/
-          local-dir: ./.clean_placeholder
-          action: delete-server-files
-          dangerous-clean-safety: true
-
-      - name: Create clean placeholder
-        run: mkdir -p .clean_placeholder
+          local-dir: ./.clean_placeholder/
+          dangerous-clean-slate: true
 
       - name: Deploy to server via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
