@@ -71,11 +71,13 @@ jobs:
           server-dir: /public_html/
           local-dir: ./
           exclude: |
-            .git/*
-            .github/*
-            .clean_placeholder/*
-            node_modules/*
-            tests/*
+            **/.git/**
+            .git/**
+            **/.github/**
+            .github/**
+            .clean_placeholder/**
+            node_modules/**
+            tests/**
             *.md
             *.ps1
             *.zip
