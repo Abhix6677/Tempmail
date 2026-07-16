@@ -16,12 +16,12 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: '8.3'
           extensions: mbstring, xml, ctype, json, bcmath, gd, imap, fileinfo
           tools: composer:v2
 
       - name: Install Dependencies
-        run: composer install --no-dev --optimize-autoloader --no-interaction
+        run: composer update --no-dev --optimize-autoloader --no-interaction
 
       - name: Setup .env
         run: |
@@ -30,7 +30,6 @@ jobs:
 
       - name: Fix index.php for shared hosting (all files in public_html)
         run: |
-          # Fix index.php paths (remove ../ since all files go to public_html root)
           sed -i "s|__DIR__ . '/../vendor|__DIR__ . '/vendor|g" public/index.php
           sed -i "s|__DIR__ . '/../bootstrap|__DIR__ . '/bootstrap|g" public/index.php
           sed -i "s|__DIR__ . '/../storage|__DIR__ . '/storage|g" public/index.php
@@ -48,16 +47,19 @@ jobs:
           </IfModule>
           EOF
 
-      - name: Create deployment zip (all files including vendor)
-        run: |
-          zip -r deploy.zip . -x ".git/*" ".github/*" "node_modules/*" "tests/*" "*.md" "*.ps1" "*.zip" "create_vendor_zip.php" "cleanup_vendor.php" "deploy_from_github.php" "fix_vendor.php" "fast_fix_vendor.php" "extract_vendor.php" "fix_vendor_path.php" "fix_backslash_paths.php" "fix_nested_vendor.php" "fix_server_index.php" "fix_server_htaccess" "fix_server_htaccess2" "new_env.txt" "combine_vendor.php" "make_vendor_zip.php" "diagnose.ps1" "check_log.ps1" "fix_db_host.ps1" "fix_env_again.ps1" "fix_storage.ps1" "patch_env.ps1" "package-lock.json" "tailwind.config.js" "postcss.config.js" "vite.config.js" ".user.ini"
-
-      - name: Upload deploy.zip as artifact
-        uses: actions/upload-artifact@v4
+      - name: Clean server (delete old files)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          name: deploy-zip
-          path: deploy.zip
-          retention-days: 1
+          server: tempumail.cu.ma
+          username: Tempumail@tempumail.cu.ma
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: /public_html/
+          local-dir: ./.clean_placeholder
+          action: delete-server-files
+          dangerous-clean-safety: true
+
+      - name: Create clean placeholder
+        run: mkdir -p .clean_placeholder
 
       - name: Deploy to server via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -70,6 +72,7 @@ jobs:
           exclude: |
             .git/*
             .github/*
+            .clean_placeholder/*
             node_modules/*
             tests/*
             *.md
@@ -101,5 +104,5 @@ jobs:
             postcss.config.js
             vite.config.js
             .user.ini
-          dry-run: false
+          action: upload
           safety: false
