@@ -18,6 +18,7 @@ class Configuration extends Component {
         'fetch_seconds' => 20,
         'email_limit' => 5,
         'fetch_messages_limit' => 15,
+        'max_attachment_size' => 5,
         'forbidden_ids' => [],
         'blocked_domains' => [],
         'allowed_domains' => [],
@@ -142,7 +143,7 @@ class Configuration extends Component {
             $this->state['random']['start'] = 0;
             $this->state['random']['end'] = 0;
         }
-        $settings = Setting::whereIn('key', ['default_domain', 'fetch_seconds', 'email_limit', 'fetch_messages_limit', 'forbidden_ids', 'blocked_domains', 'allowed_domains', 'cron_password', 'delete', 'random', 'custom', 'after_last_email_delete', 'date_format', 'disable_used_email', 'allow_reuse_email_in_days', 'captcha', 'recaptcha2', 'recaptcha3', 'hcaptcha', 'add_mail_in_title', 'allowed_file_types'])->get();
+        $settings = Setting::whereIn('key', ['default_domain', 'fetch_seconds', 'email_limit', 'fetch_messages_limit', 'max_attachment_size', 'forbidden_ids', 'blocked_domains', 'allowed_domains', 'cron_password', 'delete', 'random', 'custom', 'after_last_email_delete', 'date_format', 'disable_used_email', 'allow_reuse_email_in_days', 'captcha', 'recaptcha2', 'recaptcha3', 'hcaptcha', 'add_mail_in_title', 'allowed_file_types'])->get();
         foreach ($settings as $setting) {
             $setting->value = serialize($this->state[$setting->key]);
             $setting->save();

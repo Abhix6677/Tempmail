@@ -90,7 +90,11 @@ class CronController extends Controller {
                 break;
             }
         }
-        $connection->expunge();
+        try {
+            $connection->expunge();
+        } catch (\Throwable $e) {
+            \Log::warning('IMAP expunge failed in cron (non-fatal): ' . $e->getMessage());
+        }
         $directory = './tmp/attachments/';
         Util::rrmdir($directory);
         CronLog::add('Deleted ' . $messages->count() . ' messages older than ' . $before->diffForHumans());

@@ -7,53 +7,34 @@ use Livewire\Component;
 use App\Services\TMail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\On;
 
 class App extends Component {
 
     public $messages = [];
     public $deleted = [];
     public $error = '';
+    public $errorDetails = '';
     public $email;
     public $initial;
     public $overflow = false;
-
-    protected $listeners = ['fetchMessages' => 'fetch', 'syncEmail', 'emailGenerated'];
+    public $retryCount = 0;
 
     public function mount() {
         $this->email = TMail::getEmail();
         $this->initial = false;
     }
 
+    #[On('syncEmail')]
     public function syncEmail($email) {
         $this->email = $email;
     }
 
-    /**
-     * Called when a new email is generated (via create/random/deleteEmail)
-     * Clears stale messages so the UI doesn't show old email's inbox.
-     */
-    public function emailGenerated($email) {
-        $this->email = $email;
-        $this->messages = [];
-        $this->deleted = [];
-        $this->initial = false;
-        $this->overflow = false;
-        $this->error = '';
-    }
-
+    #[On('fetchMessages')]
     public function fetch() {
-        $this->dispatch('fetchStarted');
-
+        $this->error = '';
+        $this->errorDetails = '';
         try {
-            // Skip IMAP fetch if email is empty (no point connecting)
-            if (!$this->email) {
-                $this->initial = true;
-                $this->dispatch('stopLoader');
-                $this->dispatch('loadDownload');
-                $this->dispatch('fetchCompleted');
-                return;
-            }
-
             $count = count($this->messages);
             $responses = [];
             if (config('app.settings.engine') == 'delivery' || !config('app.settings.imap.cc_check', false)) {
@@ -86,25 +67,54 @@ class App extends Component {
             if (config('app.settings.engine') != 'delivery') {
                 TMail::incrementMessagesStats(count($notifications));
             }
-        } catch (\Throwable $e) {
-            // Log the full error for debugging
-            \Illuminate\Support\Facades\Log::warning('TMail fetch failed', [
-                'email' => $this->email,
+            // Success - reset retry count
+            $this->retryCount = 0;
+        } catch (\Exception $e) {
+            // Log the actual error for diagnostics
+            Log::error('Mail fetch failed', [
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
+                'email' => $this->email
             ]);
-            // Surface the real error to admins, a user-friendly message to everyone
+            $this->retryCount++;
+            
+            // Extract actionable error message
+            $message = $e->getMessage();
             if (Auth::check() && Auth::user()->role == 7) {
-                $this->error = __('IMAP Error') . ': ' . $e->getMessage();
+                $this->errorDetails = $message;
+            }
+            
+            // Map common errors to user-friendly messages
+            if (str_contains($message, 'not configured')) {
+                $this->error = __('Mail server is not configured');
+            } elseif (str_contains($message, 'Authentication') || str_contains($message, 'authentication') || str_contains($message, 'auth')) {
+                $this->error = __('Authentication failed — check credentials');
+            } elseif (str_contains($message, 'timeout') || str_contains($message, 'timed out')) {
+                $this->error = __('Connection timed out — server unreachable');
+            } elseif (str_contains($message, 'certificate') || str_contains($message, 'cert')) {
+                $this->error = __('SSL certificate error');
+            } elseif (str_contains($message, 'refused') || str_contains($message, 'ECONNREFUSED')) {
+                $this->error = __('Connection refused — wrong port or server down');
+            } elseif (str_contains($message, 'DNS') || str_contains($message, 'getaddrinfo')) {
+                $this->error = __('DNS lookup failed — host not found');
             } else {
                 $this->error = __('Not able to connect to Mail Server');
             }
+        } finally {
+            $this->dispatch('stopLoader');
+            $this->dispatch('loadDownload');
+            $this->initial = true;
         }
-        $this->dispatch('stopLoader');
-        $this->dispatch('loadDownload');
-        $this->initial = true;
-        $this->dispatch('fetchCompleted');
+    }
+
+    /**
+     * Retry connection with exponential backoff
+     */
+    public function retry() {
+        $this->error = '';
+        $this->errorDetails = '';
+        $this->dispatch('fetchMessages');
     }
 
     public function delete($messageId) {

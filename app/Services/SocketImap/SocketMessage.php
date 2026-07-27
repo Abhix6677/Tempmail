@@ -256,6 +256,62 @@ class SocketMessage
         $this->connection->storeFlags((string)$this->sequenceNumber, '+FLAGS', ['\\Deleted']);
     }
 
+    public function matchesRecipient(string $email, string $type = 'to'): bool
+    {
+        $this->ensureParsed();
+
+        $email = strtolower(trim($email));
+        $normalizedEmail = $this->normalizeGmailAddress($email);
+        $headersToCheck = $type === 'cc'
+            ? ['cc']
+            : ['to', 'delivered-to', 'x-original-to', 'x-forwarded-to', 'envelope-to'];
+
+        foreach ($headersToCheck as $header) {
+            $value = strtolower((string) ($this->headers[$header] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+
+            if (str_contains($value, $email) || $this->headerContainsNormalizedGmail($value, $normalizedEmail)) {
+                return true;
+            }
+        }
+
+        $raw = strtolower($this->rawHeaders);
+        return str_contains($raw, $email) || $this->headerContainsNormalizedGmail($raw, $normalizedEmail);
+    }
+
+    private function headerContainsNormalizedGmail(string $value, string $normalizedEmail): bool
+    {
+        if (!str_ends_with($normalizedEmail, '@gmail.com')) {
+            return false;
+        }
+
+        if (!preg_match_all('/[a-z0-9._%+\-]+@gmail\.com/i', $value, $matches)) {
+            return false;
+        }
+
+        foreach ($matches[0] as $address) {
+            if ($this->normalizeGmailAddress($address) === $normalizedEmail) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizeGmailAddress(string $email): string
+    {
+        $email = strtolower(trim($email));
+        if (!str_ends_with($email, '@gmail.com')) {
+            return $email;
+        }
+
+        [$local, $domain] = explode('@', $email, 2);
+        $local = explode('+', $local, 2)[0];
+        return str_replace('.', '', $local) . '@' . $domain;
+    }
+
     public function getHeaders()
     {
         $this->ensureParsed();

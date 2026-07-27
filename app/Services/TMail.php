@@ -31,18 +31,36 @@ class TMail extends Model {
         return extension_loaded('imap');
     }
 
+    /**
+     * Request-level connection cache: one IMAP connection per request.
+     * Prevents re-authenticating for every getMessages() call (to + cc).
+     */
+    private static $connectionCache = null;
+
     public static function connectMailBox($imap = null) {
         /**
          * Connect to IMAP mailbox.
          * Uses the php-imap extension when available, otherwise falls back
          * to a pure-PHP socket-based IMAP client.
          *
+         * Connection is cached per request via a static variable so it is
+         * reused for both 'to' and 'cc' fetches within a single fetch cycle.
+         *
          * @param array|null $imap
          * @return \Ddeboer\Imap\Connection|SocketConnection
          */
 
+        // Return cached connection if available (same request, reused across to/cc calls)
+        if (self::$connectionCache !== null) {
+            \Log::debug('IMAP Connection reused from cache');
+            return self::$connectionCache;
+        }
+
+        // Extend PHP execution time for IMAP operations (default 30s is too short for slow IMAP servers)
+        set_time_limit(120);
+
         // Reduce socket timeout to prevent long freeze
-        ini_set('default_socket_timeout', 8);
+        ini_set('default_socket_timeout', 10);
 
         $imap = $imap ?? config('app.settings.imap');
 
@@ -76,10 +94,10 @@ class TMail extends Model {
         if (self::hasImapExtension()) {
             // Limit IMAP extension timeouts (prevents 30s hang on Gmail/Outlook)
             if (function_exists('imap_timeout')) {
-                imap_timeout(IMAP_OPENTIMEOUT, 4);
-                imap_timeout(IMAP_READTIMEOUT, 4);
-                imap_timeout(IMAP_WRITETIMEOUT, 4);
-                imap_timeout(IMAP_CLOSETIMEOUT, 4);
+                imap_timeout(IMAP_OPENTIMEOUT, 10);
+                imap_timeout(IMAP_READTIMEOUT, 15);
+                imap_timeout(IMAP_WRITETIMEOUT, 10);
+                imap_timeout(IMAP_CLOSETIMEOUT, 5);
             }
 
             try {
@@ -87,13 +105,16 @@ class TMail extends Model {
                 $flags .= !empty($imap['validate_cert']) ? '/validate-cert' : '/novalidate-cert';
 
                 $server = new \Ddeboer\Imap\Server($imap['host'], (int) $imap['port'], $flags);
-                return $server->authenticate($username, $password);
+                $connection = $server->authenticate($username, $password);
+                self::$connectionCache = $connection;
+                return $connection;
             } catch (\Throwable $e) {
                 \Log::error('IMAP Connection Failed (php-imap)', [
                     'message' => $e->getMessage(),
                     'file' => $e->getFile(),
                     'line' => $e->getLine()
                 ]);
+                self::$connectionCache = null;
                 throw new \Exception('IMAP connection failed: ' . $e->getMessage());
             }
         }
@@ -106,6 +127,7 @@ class TMail extends Model {
             $conn = new SocketConnection($imap['host'], (int) $imap['port'], $flags);
             $conn->connect();
             $conn->authenticate($username, $password);
+            self::$connectionCache = $conn;
             return $conn;
         } catch (\Throwable $e) {
             \Log::error('IMAP Connection Failed (socket fallback)', [
@@ -113,6 +135,7 @@ class TMail extends Model {
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
+            self::$connectionCache = null;
             throw new \Exception('IMAP connection failed: ' . $e->getMessage());
         }
     }
@@ -136,16 +159,23 @@ class TMail extends Model {
 
         if ($useSocket) {
             $search = new SocketSearchExpression();
-            $search->addCondition($type === 'cc' ? new SocketSearchCc($email) : new SocketSearchTo($email));
+            $isGmailAlias = str_ends_with(strtolower(trim($email)), '@gmail.com');
+
+            if (!$isGmailAlias) {
+                $search->addCondition($type === 'cc' ? new SocketSearchCc($email) : new SocketSearchTo($email));
+            }
 
             // Only fetch messages received AFTER email was assigned
             if (session()->has('email_start_time')) {
+                /** @var \Carbon\Carbon|null $sinceDate */
                 $sinceDate = session('email_start_time');
-                $search->addCondition(new SocketSearchSince($sinceDate));
+                if ($sinceDate instanceof \DateTimeInterface) {
+                    $search->addCondition(new SocketSearchSince($sinceDate));
+                }
             }
 
             // Hard cutoff: never show messages older than 10 minutes
-            $tenMinAgo = new \DateTimeImmutable(Carbon::now()->subMinutes(10)->format('Y-m-d'));
+            $tenMinAgo = Carbon::now()->subMinutes(10)->startOfDay();
             $search->addCondition(new SocketSearchSince($tenMinAgo));
         } else {
             $search = new \Ddeboer\Imap\SearchExpression();
@@ -155,11 +185,15 @@ class TMail extends Model {
 
             // Only fetch messages received AFTER email was assigned
             if (session()->has('email_start_time')) {
-                $search->addCondition(new \Ddeboer\Imap\Search\Date\Since(session('email_start_time')));
+                /** @var \Carbon\Carbon|null $sinceDate */
+                $sinceDate = session('email_start_time');
+                if ($sinceDate instanceof \DateTimeInterface) {
+                    $search->addCondition(new \Ddeboer\Imap\Search\Date\Since($sinceDate));
+                }
             }
 
             // Hard cutoff: never show messages older than 10 minutes
-            $tenMinAgo = new \DateTimeImmutable(Carbon::now()->subMinutes(10)->format('Y-m-d'));
+            $tenMinAgo = Carbon::now()->subMinutes(10)->startOfDay();
             $search->addCondition(new \Ddeboer\Imap\Search\Date\Since($tenMinAgo));
         }
 
@@ -183,6 +217,10 @@ class TMail extends Model {
                 continue;
             }
 
+            if ($useSocket && method_exists($message, 'matchesRecipient') && !$message->matchesRecipient($email, $type)) {
+                continue;
+            }
+
             $data = self::formatMessage($message, $email);
             $response['data'][] = $data['message'];
             if ($data['notification']) {
@@ -190,7 +228,11 @@ class TMail extends Model {
             }
             if (++$count >= $limit) break;
         }
-        $connection->expunge();
+        try {
+            $connection->expunge();
+        } catch (\Throwable $e) {
+            \Log::warning('IMAP expunge failed (non-fatal): ' . $e->getMessage());
+        }
         return $response;
     }
 
@@ -287,7 +329,11 @@ class TMail extends Model {
         $connection = TMail::connectMailBox();
         $mailbox = $connection->getMailbox('INBOX');
         $mailbox->getMessage($id)->delete();
-        $connection->expunge();
+        try {
+            $connection->expunge();
+        } catch (\Throwable $e) {
+            \Log::warning('IMAP expunge failed on delete (non-fatal): ' . $e->getMessage());
+        }
     }
 
     public static function getEmail($generate = false) {
@@ -301,9 +347,7 @@ class TMail extends Model {
         }
 
         if ($generate) {
-            // Use atomic dot-variant allocation to prevent duplicate assignments
-            $email = self::generateDotAliasEmail();
-            return $email;
+            return self::generateDotAliasEmail();
         }
 
         return null;
@@ -331,7 +375,7 @@ class TMail extends Model {
     }
     public static function removeEmail($email) {
         /**
-         * Remove email from session and release the variant back to the pool
+         * Remove email from session
          * @param string $email
          */
         $emails = self::getEmails();
@@ -339,24 +383,6 @@ class TMail extends Model {
         if ($key !== false) {
             array_splice($emails, $key, 1);
         }
-
-        // Release the variant in the database so another session can claim it
-        try {
-            \App\Models\TempEmail::where('generated_address', $email)
-                ->where('session_id', session()->getId())
-                ->update([
-                    'session_id' => null,
-                    'assigned_to' => null,
-                    'assigned_at' => null,
-                    'expires_at' => null,
-                ]);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('TMail: failed to release variant on remove', [
-                'email' => $email,
-                'error' => $e->getMessage(),
-            ]);
-        }
-
         if ($emails) {
             self::setEmail($emails[0]);
             Session::put(self::SESSION_EMAILS, json_encode($emails));
@@ -413,7 +439,6 @@ class TMail extends Model {
         $forbidden_ids = config('app.settings.forbidden_ids', []);
         $domains = Domain::getDomainsForCurrentUser();
         if (in_array($username, $forbidden_ids, true)) {
-            // Fallback to atomic dot-variant allocation
             return self::generateDotAliasEmail();
         }
         $domain = in_array($domain, $domains, true) ? $domain : ($domains[0] ?? '');
@@ -456,42 +481,17 @@ class TMail extends Model {
     }
 
     /**
-     * Generate Gmail dot-alias email based on IMAP username.
-     * Uses atomic DB-level claim to prevent two sessions getting the same variant.
-     *
-     * @param int|null $index Deprecated — kept for backward compat; variant is now
-     *                         claimed via TempEmail::claimForSession() instead.
-     * @param bool $store Whether to store in session
-     * @return string
+     * Generate a random Gmail dot-alias for the configured IMAP account.
      */
-    public static function generateDotAliasEmail($index = null, $store = true) {
+    public static function generateDotAliasEmail(bool $store = true): string
+    {
         $imapUser = config('app.settings.imap.username');
 
-        // If IMAP is not configured (default placeholder or missing @), fall back to random email
         if (!$imapUser || !str_contains($imapUser, '@') || $imapUser === 'username') {
             return self::generateRandomEmail($store);
         }
 
-        // 1. Ensure variant records exist in the database (only seed once, skip if already present)
-        $variantCount = \App\Models\TempEmail::count();
-        if ($variantCount === 0) {
-            $seeded = \App\Models\TempEmail::seedVariants($imapUser);
-            if ($seeded > 0) {
-                \Illuminate\Support\Facades\Log::info("TMail: seeded {$seeded} dot-variants for {$imapUser}");
-            }
-        }
-
-        // 2. Atomically claim an unassigned variant for this session
-        $sessionId = session()->getId();
-        $variant = \App\Models\TempEmail::claimForSession($sessionId, $imapUser);
-
-        if (!$variant) {
-            // All variants currently in use — fall back to temporary random address
-            \Illuminate\Support\Facades\Log::warning('TMail: no available dot-variants, falling back to random');
-            return self::generateRandomEmail($store);
-        }
-
-        $email = $variant->generated_address;
+        $email = (new \App\Services\DotAliasService($imapUser))->generate();
 
         if ($store) {
             self::storeEmail($email);

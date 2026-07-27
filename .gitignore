@@ -40,3 +40,9 @@ PROJECT_STATUS.md
 
 .phpunit.cache
 .phpunit.result.cache
+
+*.zip
+claude-gmail-alias-inbox-fix/
+manual_upload_package/
+vite_manifest_fix/
+

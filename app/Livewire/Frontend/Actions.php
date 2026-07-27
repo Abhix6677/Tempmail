@@ -128,7 +128,7 @@ class Actions extends Component {
             TMail::removeEmail($existingEmail);
         }
 
-        // Use atomic dot-variant allocation
+        // Generate a fresh randomized Gmail dot-alias.
         $this->email = TMail::generateDotAliasEmail();
         $this->emails = TMail::getEmails();
 
@@ -153,7 +153,7 @@ class Actions extends Component {
             return;
         }
 
-        // Generate next Gmail dot-alias (variant was already released by removeEmail)
+        // Generate a fresh randomized Gmail dot-alias.
         $this->email = TMail::generateDotAliasEmail();
         $this->emails = TMail::getEmails();
 

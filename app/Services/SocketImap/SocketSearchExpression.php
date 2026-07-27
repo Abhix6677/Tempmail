@@ -90,23 +90,16 @@ class SocketSearchCc extends SocketSearchCondition
  */
 class SocketSearchSince extends SocketSearchCondition
 {
-    private $date;
+    private \DateTimeInterface $date;
 
-    public function __construct($date)
+    public function __construct(\DateTimeInterface $date)
     {
         $this->date = $date;
     }
 
     public function toImapString(): string
     {
-        if ($this->date instanceof \DateTimeImmutable || $this->date instanceof \DateTime) {
-            $dateStr = $this->date->format('d-M-Y');
-        } else {
-            // Try to parse as date string
-            $dt = new \DateTime((string) $this->date);
-            $dateStr = $dt->format('d-M-Y');
-        }
-        return 'SINCE ' . $dateStr;
+        return 'SINCE ' . $this->date->format('d-M-Y');
     }
 }
 
@@ -115,21 +108,15 @@ class SocketSearchSince extends SocketSearchCondition
  */
 class SocketSearchBefore extends SocketSearchCondition
 {
-    private $date;
+    private \DateTimeInterface $date;
 
-    public function __construct($date)
+    public function __construct(\DateTimeInterface $date)
     {
         $this->date = $date;
     }
 
     public function toImapString(): string
     {
-        if ($this->date instanceof \DateTimeImmutable || $this->date instanceof \DateTime) {
-            $dateStr = $this->date->format('d-M-Y');
-        } else {
-            $dt = new \DateTime((string) $this->date);
-            $dateStr = $dt->format('d-M-Y');
-        }
-        return 'BEFORE ' . $dateStr;
+        return 'BEFORE ' . $this->date->format('d-M-Y');
     }
 }

@@ -47,6 +47,12 @@
             <x-input-error for="state.fetch_messages_limit" class="mt-2" />
             <small>{{ __("Limit of messages retrived at a time. Keep it to as low as possible. Default - 15.") }}</small>
         </div>
+        <div class="col-span-6 sm:col-span-4">
+            <x-label for="max_attachment_size" value="{{ __('Max Attachment Size (MB)') }}" new="true" />
+            <x-input id="max_attachment_size" type="number" class="mt-1 block w-full" min="1" max="100" wire:model="state.max_attachment_size" />
+            <x-input-error for="state.max_attachment_size" class="mt-2" />
+            <small>{{ __("Attachments larger than this (in MB) will be listed but not downloaded, preventing IMAP timeouts. Default - 5 MB.") }}</small>
+        </div>
         <div x-data="{ show: false }" class="col-span-6 sm:col-span-4">
             <x-label for="cron_password" value="{{ __('CRON Password') }}" />
             <div class="relative">

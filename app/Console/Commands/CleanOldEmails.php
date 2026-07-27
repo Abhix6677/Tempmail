@@ -96,7 +96,12 @@ class CleanOldEmails extends Command
                         break;
                     }
                 }
-                $connection->expunge();
+                try {
+                    $connection->expunge();
+                } catch (\Throwable $e) {
+                    \Log::warning('IMAP expunge failed in cleanup (non-fatal): ' . $e->getMessage());
+                }
+
 
                 // Clean up attachment directory
                 $directory = './tmp/attachments/';

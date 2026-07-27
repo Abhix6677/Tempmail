@@ -19,21 +19,16 @@ class DotAliasService
     }
 
     /**
-     * Generate a dotted variation based on a numeric index.
-     * This allows deterministic generation without repetition.
+     * Generate a random dotted variation for the Gmail address.
      */
-    public function generate(int $index): string
+    public function generate(): string
     {
         $length = strlen($this->username);
+        $binary = '';
 
-        // Maximum combinations = 2^(length - 1)
-        $max = pow(2, $length - 1);
-
-        if ($index >= $max) {
-            throw new \Exception('Dot alias combinations exhausted.');
+        for ($i = 0; $i < $length - 1; $i++) {
+            $binary .= (string) random_int(0, 1);
         }
-
-        $binary = str_pad(decbin($index), $length - 1, '0', STR_PAD_LEFT);
 
         $result = '';
 
@@ -48,12 +43,4 @@ class DotAliasService
         return $result . '@' . $this->domain;
     }
 
-    /**
-     * Get maximum possible dot variations.
-     */
-    public function max(): int
-    {
-        $length = strlen($this->username);
-        return pow(2, $length - 1);
-    }
 }

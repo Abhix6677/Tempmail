@@ -36,6 +36,9 @@ class SocketMailbox
             return [];
         }
 
+        // For Gmail dot aliases we may search broadly, so only inspect newest messages.
+        $messageIds = array_slice(array_reverse($messageIds), 0, 25);
+
         $messages = [];
         foreach ($messageIds as $id) {
             try {

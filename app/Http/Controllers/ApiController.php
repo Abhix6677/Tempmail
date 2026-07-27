@@ -32,15 +32,10 @@ class APIController extends Controller {
                     }
                     return TMail::createCustomEmail($split[0], $split[1]);
                 } catch (Exception $e) {
-                    // Fallback to Gmail dot-alias instead of legacy random generator
-                    $index = session('dot_index', 0) + 1;
-                    session(['dot_index' => $index]);
-                    return TMail::generateDotAliasEmail($index, false);
+                    return TMail::generateDotAliasEmail(false);
                 }
             } else {
-                $index = session('dot_index', 0) + 1;
-                session(['dot_index' => $index]);
-                return TMail::generateDotAliasEmail($index, false);
+                return TMail::generateDotAliasEmail(false);
             }
         } else {
             return abort(401);
