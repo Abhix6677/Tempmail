@@ -32,8 +32,7 @@ storage/installed
 check_settings.php
 page.html
 
-TEST_REPORT.md
-PROJECT_STATUS.md
+
 
 .TMail-deploy-temp
 .TMail-deploy.zip
