@@ -11,28 +11,24 @@
 @endphp
 
 <!DOCTYPE html>
-<html dir="{{ config("app.settings.direction") }}" class="{{ config("app.settings.direction") }}" lang="{{ str_replace("_", "-", app()->getLocale()) }}" style="height:100%; background-color:#0f172a;">
+<html dir="{{ config("app.settings.direction", "ltr") }}" lang="{{ str_replace("_", "-", app()->getLocale()) }}" class="h-full">
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="csrf-token" content="{{ csrf_token() }}" />
 
-        {{-- Page Title and Header --}}
+        {{-- Page Title --}}
         @if (isset($page))
             {!! $page->header !!}
-            <title>{{ $page->title }} - {{ config("app.settings.name") }}</title>
+            <title>{{ $page->title }} - {{ config("app.settings.name", "TMail") }}</title>
         @elseif (isset($post))
             {!! $post->header !!}
-            <title>{{ $post->title }} - {{ config("app.settings.name") }}</title>
+            <title>{{ $post->title }} - {{ config("app.settings.name", "TMail") }}</title>
         @else
-            <title>{{ config("app.settings.name") }}</title>
+            <title>{{ config("app.settings.name", "TMail") }}</title>
         @endif
 
-        {{-- Global Header --}}
-        {!! config("app.settings.global.header") !!}
-
-        {{-- Favicon Logic --}}
-
+        {{-- Favicon --}}
         @if (config("app.settings.favicon") && Illuminate\Support\Facades\Storage::disk("public")->has(config("app.settings.favicon")))
             <link rel="icon" href="{{ url("storage/" . config("app.settings.favicon")) }}" />
         @elseif (Illuminate\Support\Facades\Storage::disk("public")->has("images/custom-favicon.png"))
@@ -42,7 +38,11 @@
         @endif
 
         {{-- Font Awesome --}}
-        <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css" integrity="sha512-+4zCK9k+qNFUR5X+cKL9EIR+ZOhtIloNl9GIKS57V1MyNsYpYcUrUeQc9vNfzsWfV28IaLL3i96P9sdNyeRssA==" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css" />
+
+        {{-- Google / Bunny Fonts - Inter --}}
+        <link rel="preconnect" href="https://fonts.bunny.net" />
+        <link href="https://fonts.bunny.net/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
         {{-- Vite Assets --}}
         @vite(["resources/css/app.css", "resources/sass/common.scss", "resources/js/app.js"])
@@ -50,163 +50,310 @@
         {{-- Shortcode Script --}}
         <script src="{{ asset("vendor/Shortcode/Shortcode.js") }}"></script>
 
-        {{-- Google Fonts --}}
-        <link rel="preconnect" href="https://fonts.bunny.net" />
-        <link href="https://fonts.bunny.net/css2?family={{ str_replace(" ", "+", config("app.settings.font_family.head", "Poppins")) }}:wght@400;600;700&display=swap" rel="preload" as="style" onload="this.onload=null;this.rel='stylesheet'" />
-        <link href="https://fonts.bunny.net/css2?family={{ str_replace(" ", "+", config("app.settings.font_family.body", "Poppins")) }}:wght@400;600&display=swap" rel="preload" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+        {{-- Theme Initialization & Controller --}}
+        <script>
+            function getPreferredTheme() {
+                try {
+                    const tmailTheme = localStorage.getItem('tmail-theme');
+                    if (tmailTheme === 'dark') return 'dark';
+                    if (tmailTheme === 'light') return 'light';
+                    const dm = localStorage.getItem('darkmode');
+                    if (dm === 'enabled') return 'dark';
+                    if (dm === 'disabled') return 'light';
+                } catch (e) {}
+                return 'light'; // Strictly default to light mode
+            }
 
-        {{-- CSS Variables --}}
-        @php
-            $headFont = config("app.settings.font_family.head", "Poppins");
-            $bodyFont = config("app.settings.font_family.body", "Poppins");
-            $primary = config("app.settings.colors.primary", "#0155b5");
-            $secondary = config("app.settings.colors.secondary", "#2fc10a");
-            $tertiary = config("app.settings.colors.tertiary", "#d2ab3e");
-        @endphp
+            (function() {
+                const theme = getPreferredTheme();
+                document.documentElement.setAttribute('data-theme', theme);
+                document.documentElement.setAttribute('data-mode', theme);
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.classList.remove('light');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.classList.add('light');
+                }
+            })();
+
+            function applyTheme(theme) {
+                const isDark = theme === 'dark';
+                document.documentElement.setAttribute('data-theme', theme);
+                document.documentElement.setAttribute('data-mode', theme);
+                if (isDark) {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.classList.remove('light');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.classList.add('light');
+                }
+                try {
+                    localStorage.setItem('tmail-theme', theme);
+                    localStorage.setItem('darkmode', isDark ? 'enabled' : 'disabled');
+                } catch (e) {}
+
+                // Immediately update all theme button icons and titles
+                document.querySelectorAll('.theme-sun-icon').forEach(function(el) {
+                    el.style.display = isDark ? 'block' : 'none';
+                });
+                document.querySelectorAll('.theme-moon-icon').forEach(function(el) {
+                    el.style.display = isDark ? 'none' : 'block';
+                });
+                const btn = document.getElementById('theme-toggle-btn');
+                if (btn) {
+                    btn.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+                    btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+                }
+
+                window.dispatchEvent(new CustomEvent('tmail-theme-changed', { detail: { theme: theme, isDark: isDark } }));
+                window.dispatchEvent(new CustomEvent('darkmode-changed', { detail: { darkmode: isDark } }));
+            }
+
+            function toggleTheme() {
+                const current = document.documentElement.getAttribute('data-theme') || (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+                const next = current === 'dark' ? 'light' : 'dark';
+                applyTheme(next);
+                return next;
+            }
+
+            window.getPreferredTheme = getPreferredTheme;
+            window.toggleTheme = toggleTheme;
+            window.applyTheme = applyTheme;
+            window.enableDarkMode = function() { applyTheme('dark'); };
+            window.disableDarkMode = function() { applyTheme('light'); };
+
+            document.addEventListener('DOMContentLoaded', () => {
+                applyTheme(getPreferredTheme());
+            });
+        </script>
 
         <style>
+            [x-cloak] { display: none !important; }
+            :root, :root[data-theme="dark"], html.dark, html[data-mode="dark"] {
+                --theme-bg: #0F172A;
+                --theme-sidebar-bg: #0F172A;
+                --theme-sidebar-border: #1E293B;
+                --theme-surface: #1E293B;
+                --theme-surface-border: #334155;
+                --theme-surface-header: #131B2E;
+                --theme-text-primary: #F8FAFC;
+                --theme-text-secondary: #94A3B8;
+                --theme-text-muted: #64748B;
+                --theme-inbox-bg: rgba(37, 99, 235, 0.2);
+                --theme-inbox-text: #60A5FA;
+                --theme-item-hover: #1E293B;
+                --theme-account-bg: #1E293B;
+                --theme-account-border: #334155;
+                --theme-account-avatar-bg: rgba(37, 99, 235, 0.25);
+                --theme-account-avatar-text: #93C5FD;
+                --theme-button-secondary-bg: #0F172A;
+                --theme-button-secondary-border: #334155;
+                --theme-button-secondary-text: #F8FAFC;
+                --theme-button-secondary-hover: #1E293B;
+                --theme-input-bg: #0F172A;
+                --theme-input-border: #334155;
+                --theme-input-text: #F8FAFC;
+                --theme-illustr-circle-1: #1E293B;
+                --theme-illustr-circle-2: #162032;
+                --theme-illustr-env-back: #334155;
+                --theme-illustr-env-front: #475569;
+                --theme-illustr-env-border: #64748B;
+                --theme-illustr-letter: #1E293B;
+                --theme-illustr-letter-border: #475569;
+                --theme-illustr-line-1: #64748B;
+                --theme-illustr-line-2: #475569;
+            }
+
+            :root[data-theme="light"], html.light, html[data-mode="light"] {
+                --theme-bg: #E2E8F0;
+                --theme-sidebar-bg: #E2E8F0;
+                --theme-sidebar-border: #CBD5E1;
+                --theme-surface: #FFFFFF;
+                --theme-surface-border: #CBD5E1;
+                --theme-surface-header: #F1F5F9;
+                --theme-text-primary: #0F172A;
+                --theme-text-secondary: #475569;
+                --theme-text-muted: #64748B;
+                --theme-inbox-bg: #FFFFFF;
+                --theme-inbox-text: #2563EB;
+                --theme-item-hover: #CBD5E1;
+                --theme-account-bg: #FFFFFF;
+                --theme-account-border: #CBD5E1;
+                --theme-account-avatar-bg: #EFF6FF;
+                --theme-account-avatar-text: #2563EB;
+                --theme-button-secondary-bg: #FFFFFF;
+                --theme-button-secondary-border: #CBD5E1;
+                --theme-button-secondary-text: #0F172A;
+                --theme-button-secondary-hover: #F8FAFC;
+                --theme-input-bg: #FFFFFF;
+                --theme-input-border: #94A3B8;
+                --theme-input-text: #0F172A;
+                --theme-illustr-circle-1: #EFF6FF;
+                --theme-illustr-circle-2: #DBEAFE;
+                --theme-illustr-env-back: #BFDBFE;
+                --theme-illustr-env-front: #93C5FD;
+                --theme-illustr-env-border: #3B82F6;
+                --theme-illustr-letter: #FFFFFF;
+                --theme-illustr-letter-border: #CBD5E1;
+                --theme-illustr-line-1: #475569;
+                --theme-illustr-line-2: #64748B;
+            }
+
+            * {
+                box-sizing: border-box;
+                transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+            }
             html, body {
                 height: 100%;
                 margin: 0;
                 padding: 0;
-                background-color: #0f172a; /* hard fallback to dark bg */
+                font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background-color: var(--theme-bg) !important;
+                color: var(--theme-text-primary) !important;
+                overflow: hidden;
             }
 
-            :root {
-                --head-font: '{{ $headFont }}';
-                --body-font: '{{ $bodyFont }}';
-                --primary: {{ $primary }};
-                --secondary: {{ $secondary }};
-                --tertiary: {{ $tertiary }};
+            aside svg {
+                width: 18px !important;
+                height: 18px !important;
+                max-width: 18px !important;
+                max-height: 18px !important;
+                flex-shrink: 0 !important;
+            }
+            aside svg[style*="display: none"], aside [style*="display: none"], aside [x-cloak] {
+                display: none !important;
+            }
+            aside a[href*="home"] svg, aside .brand-logo svg {
+                width: 20px !important;
+                height: 20px !important;
+                max-width: 20px !important;
+                max-height: 20px !important;
+            }
+            aside button[class*="New Mailbox"] svg, aside button:first-child svg {
+                width: 16px !important;
+                height: 16px !important;
+                max-width: 16px !important;
+                max-height: 16px !important;
+            }
+
+            @keyframes spinAnimation {
+                from {
+                    transform: rotate(0deg);
+                }
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            .animate-spin {
+                animation: spinAnimation 0.8s linear infinite !important;
+            }
+            .no-scrollbar::-webkit-scrollbar {
+                display: none;
+            }
+            .no-scrollbar {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
             }
         </style>
 
         {{-- Livewire Styles --}}
         @livewireStyles
 
-        {{-- Global CSS --}}
+        {!! config("app.settings.global.header") !!}
         {!! config("app.settings.global.css") !!}
-
-        {{-- App Header --}}
-        @if (! isset($page) && ! isset($post))
-            {!! config("app.settings.app_header") !!}
-        @endif
     </head>
-    <body class="h-full flex flex-col text-gray-200 bg-gray-900" style="background-color:#0f172a !important;">
-        <div class="h-full flex flex-col bg-gray-900">
-            {{-- Livewire Component --}}
+    <body class="h-full w-full antialiased overflow-hidden font-sans">
+        
+        {{-- App Container --}}
+        <div class="h-full w-full flex flex-col overflow-hidden">
             {{ $slot }}
         </div>
 
-        {{-- Modals --}}
+        {{-- Modals Stack --}}
         @stack("modals")
-
-        {{-- Cookie Policy --}}
-        @if (config("app.settings.cookie.enable"))
-            <div id="cookie" class="hidden fixed w-full bottom-0 left-0 p-4 bg-gray-900 text-white justify-between">
-                <div class="py-2">
-                    {!! __(config("app.settings.cookie.text")) !!}
-                </div>
-                <div id="cookie_close" class="px-3 py-2 bg-yellow-300 text-gray-900 rounded-md cursor-pointer">
-                    {{ __("Close") }}
-                </div>
-            </div>
-        @endif
-
-        {{-- Language Helper --}}
-        <div class="hidden language-helper">
-            <div class="error">{{ __("Error") }}</div>
-            <div class="success">{{ __("Success") }}</div>
-            <div class="copy_text">{{ __("Email ID Copied to Clipboard") }}</div>
-        </div>
 
         {{-- Livewire Scripts --}}
         @livewireScripts
 
-        {{-- Inline Scripts --}}
+        {{-- TimeAgo & Auto-Fetch Polling --}}
+        <script>
+            window.formatTimeAgo = function(timestamp) {
+                if (!timestamp) return '';
+                const then = new Date(timestamp);
+                const now = new Date();
+                const diffInSec = Math.max(0, Math.floor((now - then) / 1000));
+                if (diffInSec < 45) return 'just now';
+                if (diffInSec < 90) return '1 minute ago';
+                const mins = Math.floor(diffInSec / 60);
+                if (mins < 45) return mins + ' minutes ago';
+                if (mins < 90) return '1 hour ago';
+                const hours = Math.floor(diffInSec / 3600);
+                if (hours < 22) return hours + ' hours ago';
+                if (hours < 36) return '1 day ago';
+                const days = Math.floor(diffInSec / 86400);
+                if (days < 26) return days + ' days ago';
+                if (days < 45) return '1 month ago';
+                const months = Math.floor(days / 30);
+                if (months < 11) return months + ' months ago';
+                if (months < 18) return '1 year ago';
+                const years = Math.floor(days / 365);
+                return years + ' years ago';
+            };
+        </script>
         @if (! isset($page) && ! isset($post))
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
                     try {
                         const email = '{{ App\Services\TMail::getEmail(true) }}' || '';
-                        const add_mail_in_title = '{{ config("app.settings.add_mail_in_title") ? "yes" : "no" }}';
-                        if (add_mail_in_title === 'yes') {
-                            document.title += ` - ${email}`;
-                        }
                         if (email) {
                             Livewire.dispatch('syncEmail', { email });
                         }
-                        // Small delay to ensure Livewire components are mounted
-                        setTimeout(() => {
-                            Livewire.dispatch('fetchMessages');
-                        }, 100);
+                        @php
+                            $currentEmail = App\Services\TMail::getEmail();
+                            $hasCached = $currentEmail ? (!empty(Illuminate\Support\Facades\Cache::get('tmail_inbox_' . md5($currentEmail), [])) || !empty(session()->get('tmail_messages_' . $currentEmail, []))) : false;
+                        @endphp
+                        const hasCached = {{ $hasCached ? 'true' : 'false' }};
+                        if (!hasCached) {
+                            setTimeout(() => {
+                                Livewire.dispatch('fetchMessages');
+                            }, 500);
+                        }
+
+                        // Background auto-fetch polling
+                        let fetchInProgress = false;
+                        const fetchInterval = parseInt({{ config('app.settings.fetch_seconds', 20) }}) || 20;
+                        let counter = fetchInterval;
+
+                        if (window.Livewire) {
+                            Livewire.on('stopLoader', () => { fetchInProgress = false; });
+                            Livewire.on('fetchCompleted', () => { fetchInProgress = false; });
+                        }
+
+                        setInterval(() => {
+                            if (document.hidden) {
+                                counter = 2;
+                                return;
+                            }
+                            if (counter <= 0) {
+                                if (!fetchInProgress && document.getElementById('imap-error') === null) {
+                                    fetchInProgress = true;
+                                    Livewire.dispatch('fetchMessages');
+                                    setTimeout(() => { fetchInProgress = false; }, 12000);
+                                }
+                                counter = fetchInterval;
+                            } else {
+                                counter--;
+                            }
+                        }, 1000);
                     } catch (e) {
-                        console.warn('TMail: Error during initialization', e);
+                        console.warn('TMail init:', e);
                     }
                 });
             </script>
         @endif
 
-        <script>
-            document.addEventListener('livewire:init', () => {
-                Livewire.on('stopLoader', () => {
-                    setTimeout(() => {
-                        if (document.getElementById('refresh')) {
-                            document.getElementById('refresh').classList.add('pause-spinner');
-                        }
-                    }, 500);
-                });
-            });
-
-            // Fetch interval with guard against stacking requests
-            let fetchInProgress = false;
-            let fetchSeconds = parseInt({{ config("app.settings.fetch_seconds", 30) }});
-            let counter = isNaN(fetchSeconds) ? 30 : fetchSeconds;
-
-            Livewire.on('fetchStarted', () => { fetchInProgress = true; });
-            Livewire.on('fetchCompleted', () => { fetchInProgress = false; });
-
-            setInterval(() => {
-                // Safety: reset fetch guard if it's been stuck for more than 2 polling cycles
-                if (fetchInProgress && counter <= -2) {
-                    fetchInProgress = false;
-                    console.warn('TMail: fetch guard auto-reset (stuck)');
-                }
-
-                if (counter <= 0 && document.getElementById('imap-error') === null && !document.hidden && !fetchInProgress) {
-                    if (document.getElementById('refresh')) {
-                        document.getElementById('refresh').classList.remove('pause-spinner');
-                    }
-                    fetchInProgress = true;
-                    // Catch Livewire dispatch errors so fetch guard always resets
-                    Livewire.dispatch('fetchMessages')
-                        .catch(() => {
-                            fetchInProgress = false;
-                            console.warn('TMail: fetch dispatch failed, guard reset');
-                        });
-                    let fresh = parseInt({{ config("app.settings.fetch_seconds", 30) }});
-                    counter = isNaN(fresh) ? 30 : fresh;
-                } else {
-                    counter--;
-                }
-                if (document.hidden) {
-                    counter = 1;
-                }
-            }, 1000);
-        </script>
-
-        {{-- Captcha Configuration --}}
-        <script>
-            let captcha_name = '{{ config("app.settings.captcha", "off") }}';
-            let site_key = '';
-            if (captcha_name && captcha_name !== 'off') {
-                site_key = '{{ config("app.settings." . config("app.settings.captcha") . ".site_key", "") }}';
-            }
-            let strings = {!! json_encode(\Lang::get("*")) !!};
-            const __ = (string) => strings[string] ?? string;
-        </script>
-
-        {{-- Session Alerts --}}
+        {{-- Toast / Alert Handling --}}
         @foreach (["success", "error"] as $type)
             @if (Session::has($type))
                 <script defer>
@@ -225,51 +372,6 @@
             @endif
         @endforeach
 
-        {{-- Ad Block Detector --}}
-        @if (config("app.settings.enable_ad_block_detector"))
-            <script>
-                fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js').catch(() => {
-                    document.querySelector('[class*="-theme"]').remove();
-                    document.querySelector('body > div').insertAdjacentHTML(
-                        'beforebegin',
-                        `
-                        <div class="fixed w-screen h-screen bg-red-800 flex flex-col justify-center items-center gap-5 z-50 text-white">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-40 w-40" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clip-rule="evenodd" />
-                            </svg>
-                            <h1 class="text-4xl font-bold">{{ __("Ad Blocker Detected") }}</h1>
-                            <h2>{{ __("Disable the Ad Blocker to use ") . config("app.settings.name") }}</h2>
-                        </div>
-                        `
-                    );
-                });
-            </script>
-        @endif
-
-        @if (config("app.settings.enable_dark_mode"))
-            <script>
-                document.addEventListener('DOMContentLoaded', () => {
-                    const darkmode = localStorage.getItem('darkmode');
-                    if (darkmode && darkmode == 'enabled') {
-                        enableDarkMode();
-                    } else if (!darkmode && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                        enableDarkMode();
-                    } else {
-                        disableDarkMode();
-                    }
-                });
-                function enableDarkMode() {
-                    document.documentElement.setAttribute('data-mode', 'dark');
-                    localStorage.setItem('darkmode', 'enabled');
-                }
-                function disableDarkMode() {
-                    document.documentElement.setAttribute('data-mode', 'light');
-                    localStorage.setItem('darkmode', 'disabled');
-                }
-            </script>
-        @endif
-
-        {{-- Global Scripts --}}
         {!! config("app.settings.global.js") !!}
         {!! config("app.settings.global.footer") !!}
     </body>

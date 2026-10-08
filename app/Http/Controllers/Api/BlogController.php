@@ -13,8 +13,9 @@ class BlogController extends Controller {
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 6);
         $search = $request->input('search', '');
-        $order = $request->input('order', 'desc');
-        $orderBy = $request->input('orderby', 'created_at');
+        $order = strtolower($request->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $allowedOrderBy = ['id', 'title', 'created_at', 'updated_at', 'views'];
+        $orderBy = in_array($request->input('orderby', 'created_at'), $allowedOrderBy, true) ? $request->input('orderby', 'created_at') : 'created_at';
 
         $posts = Post::with('categories', 'translations')
             ->where('title', 'like', "%{$search}%")

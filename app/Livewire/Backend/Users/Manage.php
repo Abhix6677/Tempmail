@@ -29,6 +29,10 @@ class Manage extends Component {
     public function userAction($user_id, $action) {
         $user = User::find($user_id);
         if ($user) {
+            if ($user->id === auth()->id() && in_array($action, ['suspend', 'delete'])) {
+                session()->flash('error', __('You cannot suspend or delete your own account.'));
+                return;
+            }
             if ($action == 'suspend') {
                 $user->role = 0;
                 $user->save();

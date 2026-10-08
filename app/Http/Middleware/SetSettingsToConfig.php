@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Schema;
 use App\Models\Setting;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class SetSettingsToConfig {
@@ -18,12 +19,24 @@ class SetSettingsToConfig {
      */
     public function handle(Request $request, Closure $next): Response {
         try {
-            $options = Schema::hasTable((new Setting)->getTable()) ? Setting::get() : [];
-            foreach ($options as $option) {
+            $settings = Cache::remember('tmail_settings_key_values', 3600, function () {
+                if (!Schema::hasTable((new Setting)->getTable())) {
+                    return [];
+                }
+                $records = Setting::all();
+                $arr = [];
+                foreach ($records as $option) {
+                    $arr[$option->key] = Setting::safeUnserialize($option->value);
+                }
+                return $arr;
+            });
+
+            foreach ($settings as $key => $val) {
                 config([
-                    'app.settings.' . $option->key => unserialize($option->value)
+                    'app.settings.' . $key => $val
                 ]);
             }
+
             // Get theme from query parameter first, then from session
             $theme = $request->query('theme') ?: session('theme');
 

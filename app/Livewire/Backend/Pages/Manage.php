@@ -193,8 +193,8 @@ class Manage extends Component {
         }
 
         $this->page['lang'] = $language;
-        $details = config('app.settings.languages')[$language];
-        $this->page['lang_text'] = $details['label'];
+        $details = config('app.settings.languages.' . $language, ['label' => strtoupper($language)]);
+        $this->page['lang_text'] = $details['label'] ?? strtoupper($language);
         $this->dispatch('component-updated');
     }
 

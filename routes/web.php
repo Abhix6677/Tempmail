@@ -7,6 +7,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Services\Util;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Cache;
 
 Route::get('/installer', function () {
     if (file_exists(storage_path('installed'))) {
@@ -56,7 +57,7 @@ Route::middleware(['verify.install', 'handle.language'])->group(function () {
     });
     /** Auth Routes */
     if (Util::checkDatabaseConnection()) {
-        $hasAdmin = User::where('role', 7)->exists();
+        $hasAdmin = Cache::remember('has_admin_user', 3600, fn() => User::where('role', 7)->exists());
         $user_registration = Setting::pick('user_registration');
         // Block registration only if: setting exists, enabled is false, AND at least one admin exists
         // This allows first-time registration when no admin has been created yet
@@ -73,6 +74,7 @@ Route::middleware(['verify.install', 'handle.language'])->group(function () {
     Route::post('locale', [AppController::class, 'locale'])->name('locale');
     Route::post('widget/contact', [WidgetController::class, 'contact'])->name('widget.contact');
     Route::get('sitemap.xml', [AppController::class, 'sitemap']);
+    Route::get('image-proxy', [AppController::class, 'imageProxy'])->name('image.proxy');
     Route::middleware(['app.lock', 'check.member', 'handle.language.prefix'])->group(function () {
         $frontendRoutes = function () {
             /** Frontend Routes */

@@ -33,9 +33,7 @@ class Theme extends Component {
     }
 
     public function save() {
-        $setting = Setting::where('key', 'theme_options')->first();
-        $setting->value = serialize($this->state['theme_options']);
-        $setting->save();
+        Setting::put('theme_options', $this->state['theme_options']);
         $this->dispatch('saved');
     }
 

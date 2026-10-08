@@ -148,6 +148,10 @@ class Configuration extends Component {
             $setting->value = serialize($this->state[$setting->key]);
             $setting->save();
         }
+        \Illuminate\Support\Facades\Cache::forget('tmail_settings_key_values');
+        if (class_exists('\App\Repositories\SettingsRepository')) {
+            \App\Repositories\SettingsRepository::clearCache();
+        }
         $this->dispatch('saved');
     }
 

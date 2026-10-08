@@ -12,7 +12,9 @@ class DotAliasService
     {
         $this->baseEmail = strtolower(trim($baseEmail));
 
-        [$this->username, $this->domain] = explode('@', $this->baseEmail);
+        $parts = explode('@', $this->baseEmail, 2);
+        $this->username = $parts[0] ?? 'user';
+        $this->domain = $parts[1] ?? 'gmail.com';
 
         // Gmail ignores dots, so remove existing dots first
         $this->username = str_replace('.', '', $this->username);

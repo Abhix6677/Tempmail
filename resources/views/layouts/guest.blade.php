@@ -4,6 +4,32 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="csrf-token" content="{{ csrf_token() }}" />
+        <script>
+            function getPreferredTheme() {
+                try {
+                    const tmailTheme = localStorage.getItem('tmail-theme');
+                    if (tmailTheme === 'dark') return 'dark';
+                    if (tmailTheme === 'light') return 'light';
+                    const dm = localStorage.getItem('darkmode');
+                    if (dm === 'enabled') return 'dark';
+                    if (dm === 'disabled') return 'light';
+                } catch (e) {}
+                return 'light'; // Strictly default to light mode
+            }
+
+            (function() {
+                const theme = getPreferredTheme();
+                document.documentElement.setAttribute('data-theme', theme);
+                document.documentElement.setAttribute('data-mode', theme);
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.classList.remove('light');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.classList.add('light');
+                }
+            })();
+        </script>
 
         <title>@yield("title", config("app.settings.name", "TMail"))</title>
         <link rel="shortcut icon" href="{{ asset("images/icon.png") }}" type="image/png" />
@@ -50,27 +76,35 @@
 
         @livewireScripts
 
-        @if (config("app.settings.enable_dark_mode"))
-            <script>
-                document.addEventListener('DOMContentLoaded', () => {
-                    const darkmode = localStorage.getItem('darkmode');
-                    if (darkmode && darkmode == 'enabled') {
-                        enableDarkMode();
-                    } else if (!darkmode && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                        enableDarkMode();
-                    } else {
-                        disableDarkMode();
-                    }
-                });
-                function enableDarkMode() {
-                    document.documentElement.setAttribute('data-mode', 'dark');
+        <script>
+            function enableDarkMode() {
+                document.documentElement.classList.add('dark');
+                document.documentElement.classList.remove('light');
+                document.documentElement.setAttribute('data-mode', 'dark');
+                document.documentElement.setAttribute('data-theme', 'dark');
+                try {
                     localStorage.setItem('darkmode', 'enabled');
-                }
-                function disableDarkMode() {
-                    document.documentElement.setAttribute('data-mode', 'light');
+                    localStorage.setItem('tmail-theme', 'dark');
+                } catch (e) {}
+            }
+            function disableDarkMode() {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+                document.documentElement.setAttribute('data-mode', 'light');
+                document.documentElement.setAttribute('data-theme', 'light');
+                try {
                     localStorage.setItem('darkmode', 'disabled');
+                    localStorage.setItem('tmail-theme', 'light');
+                } catch (e) {}
+            }
+            document.addEventListener('DOMContentLoaded', () => {
+                const theme = (typeof getPreferredTheme === 'function') ? getPreferredTheme() : 'light';
+                if (theme === 'dark') {
+                    enableDarkMode();
+                } else {
+                    disableDarkMode();
                 }
-            </script>
-        @endif
+            });
+        </script>
     </body>
 </html>

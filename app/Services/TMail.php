@@ -20,8 +20,11 @@ class TMail extends Model {
     /**
      * Session key constants
      */
+    public const MAX_USER_EMAILS = 3;
+    public const EMAIL_EXPIRY_MINUTES = 60;
     private const SESSION_EMAIL = 'email';
     private const SESSION_EMAILS = 'emails';
+    private const SESSION_EMAILS_TIMESTAMPS = 'emails_timestamps';
 
     /**
      * Check if the php-imap C extension is available.
@@ -263,7 +266,7 @@ class TMail extends Model {
             'subject' => $message->getSubject(),
             'sender_name' => $sender->getName(),
             'sender_email' => $sender->getAddress(),
-            'timestamp' => $message->getDate(),
+            'timestamp' => $date ? $date->format('c') : date('c'),
             'date' => $date->format(config('app.settings.date_format', 'd M Y h:i A')),
             'datediff' => $datediff->diffForHumans(),
             'id' => $message->getNumber(),
@@ -288,7 +291,7 @@ class TMail extends Model {
         // Attachments
         if ($message->hasAttachments() && !$blocked) {
             $attachments = $message->getAttachments();
-            $directory = './tmp/attachments/' . $obj['id'] . '/';
+            $directory = public_path('tmp/attachments/' . $obj['id'] . '/');
             if (!is_dir($directory)) mkdir($directory, 0777, true);
             foreach ($attachments as $attachment) {
                 $filename = $attachment->getFilename();
@@ -299,7 +302,7 @@ class TMail extends Model {
                         file_put_contents($filepath, $attachment->getDecodedContent());
                     }
                     if ($filename !== 'undefined') {
-                        $url = env('APP_URL') . str_replace('./', '/', $filepath);
+                        $url = asset('tmp/attachments/' . $obj['id'] . '/' . $filename);
                         $structure = $attachment->getStructure();
                         if (isset($structure->id) && str_contains($obj['content'], trim($structure->id, '<>'))) {
                             $obj['content'] = str_replace('cid:' . trim($structure->id, '<>'), $url, $obj['content']);
@@ -309,6 +312,10 @@ class TMail extends Model {
                 }
             }
         }
+
+        // Proxy external images to bypass CORP restrictions (e.g. claude.ai)
+        $obj['content'] = self::proxyImages($obj['content']);
+
         // Notification
         $notification = '';
         if (!$message->isSeen()) {
@@ -325,6 +332,42 @@ class TMail extends Model {
         return ['message' => $obj, 'notification' => $notification];
     }
 
+    /**
+     * Rewrite external image URLs to route through the local image proxy
+     * to bypass CORS and Cross-Origin-Resource-Policy restrictions.
+     */
+    public static function proxyImages($content) {
+        if (!$content) {
+            return $content;
+        }
+
+        // Prepend or inject meta referrer tag
+        if (stripos($content, '<head>') !== false) {
+            $content = preg_replace('/<head>/i', '<head><meta name="referrer" content="no-referrer">', $content, 1);
+        } elseif (stripos($content, '<html') !== false) {
+            $content = preg_replace('/(<html[^>]*>)/i', '$1<head><meta name="referrer" content="no-referrer"></head>', $content, 1);
+        } else {
+            $content = '<meta name="referrer" content="no-referrer">' . $content;
+        }
+
+        // Rewrite <img ... src="http..." ...>
+        $content = preg_replace_callback('/<img\b([^>]*?)\bsrc=["\'](https?:\/\/[^"\']+)["\']([^>]*?)>/i', function ($matches) {
+            $before = $matches[1];
+            $url = html_entity_decode($matches[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $after = $matches[3];
+
+            $appUrl = config('app.url') ?: url('/');
+            if (str_starts_with($url, $appUrl) || str_contains($url, 'image-proxy')) {
+                return $matches[0];
+            }
+
+            $proxyUrl = route('image.proxy', ['url' => $url]);
+            return '<img' . $before . 'src="' . e($proxyUrl) . '" referrerpolicy="no-referrer"' . $after . '>';
+        }, $content);
+
+        return $content;
+    }
+
     public static function deleteMessage($id) {
         $connection = TMail::connectMailBox();
         $mailbox = $connection->getMailbox('INBOX');
@@ -336,12 +379,129 @@ class TMail extends Model {
         }
     }
 
-    public static function getEmail($generate = false) {
         /**
-         * Get current email from session or generate new
-         * @param bool $generate
-         * @return string|null
-         */
+     * Get issue timestamps for all session emails.
+     * @return array<string, int>
+     */
+    public static function getEmailTimestamps(): array
+    {
+        if (Session::has(self::SESSION_EMAILS_TIMESTAMPS)) {
+            $data = json_decode(Session::get(self::SESSION_EMAILS_TIMESTAMPS), true);
+            return is_array($data) ? $data : [];
+        }
+        return [];
+    }
+
+    /**
+     * Get remaining minutes before the email expires (60-minute limit).
+     * @param string|null $email
+     * @return int
+     */
+    public static function getEmailRemainingMinutes(?string $email): int
+    {
+        if (!$email) return self::EMAIL_EXPIRY_MINUTES;
+        $timestamps = self::getEmailTimestamps();
+        $issuedAt = $timestamps[$email] ?? null;
+        if (!$issuedAt) return self::EMAIL_EXPIRY_MINUTES;
+        $elapsed = max(0, now()->timestamp - $issuedAt);
+        $remainingSeconds = max(0, (self::EMAIL_EXPIRY_MINUTES * 60) - $elapsed);
+        return (int) ceil($remainingSeconds / 60);
+    }
+
+    /**
+     * Purge emails that have exceeded the 60-minute limit or exceed the 3-email max.
+     * Destroys all associated messages, attachments, and database records.
+     * @return array
+     */
+    public static function purgeExpiredEmails(): array
+    {
+        $emails = [];
+        if (Session::has(self::SESSION_EMAILS)) {
+            $raw = json_decode(Session::get(self::SESSION_EMAILS), true);
+            $emails = is_array($raw) ? $raw : [];
+        }
+
+        $timestamps = self::getEmailTimestamps();
+        $now = now()->timestamp;
+        $maxAge = self::EMAIL_EXPIRY_MINUTES * 60; // 3600 seconds (60 mins)
+
+        $remaining = [];
+        $hasChanges = false;
+        $currentEmail = Session::get(self::SESSION_EMAIL);
+
+        foreach ($emails as $em) {
+            $issuedAt = $timestamps[$em] ?? null;
+            if (!$issuedAt) {
+                $timestamps[$em] = $now;
+                $remaining[] = $em;
+                $hasChanges = true;
+                continue;
+            }
+
+            if (($now - $issuedAt) >= $maxAge) {
+                // 60 minutes expired - Destroy all mailbox data
+                self::destroyEmailData($em);
+                unset($timestamps[$em]);
+                $hasChanges = true;
+            } else {
+                $remaining[] = $em;
+            }
+        }
+
+        // Enforce maximum 3 emails per user
+        while (count($remaining) > self::MAX_USER_EMAILS) {
+            $oldest = array_shift($remaining);
+            self::destroyEmailData($oldest);
+            unset($timestamps[$oldest]);
+            $hasChanges = true;
+        }
+
+        if ($hasChanges || !Session::has(self::SESSION_EMAILS_TIMESTAMPS)) {
+            Session::put(self::SESSION_EMAILS_TIMESTAMPS, json_encode($timestamps));
+            Session::put(self::SESSION_EMAILS, json_encode(array_values($remaining)));
+            if (!in_array($currentEmail, $remaining, true)) {
+                if (!empty($remaining)) {
+                    Session::put(self::SESSION_EMAIL, $remaining[0]);
+                } else {
+                    Session::forget(self::SESSION_EMAIL);
+                }
+            }
+        }
+
+        return array_values($remaining);
+    }
+
+    /**
+     * Destroy all data associated with an email (messages, attachments, db records).
+     * @param string $email
+     */
+    public static function destroyEmailData(string $email): void
+    {
+        try {
+            $messages = Message::where('to', 'like', '%' . $email . '%')->get();
+            foreach ($messages as $msg) {
+                $dir = './tmp/attachments/' . $msg->id . '/';
+                if (is_dir($dir)) {
+                    Util::rrmdir($dir);
+                }
+                $msg->delete();
+            }
+
+            \App\Models\ReceivedEmail::where('email', $email)->delete();
+            \App\Models\TempEmail::where('generated_address', $email)->update([
+                'session_id' => null,
+                'assigned_to' => null,
+                'assigned_at' => null,
+                'expires_at' => null,
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Error destroying email data for {$email}: " . $e->getMessage());
+        }
+    }
+
+    public static function getEmail($generate = false) {
+        self::purgeExpiredEmails();
+
         if (Session::has(self::SESSION_EMAIL)) {
             return Session::get(self::SESSION_EMAIL);
         }
@@ -352,37 +512,29 @@ class TMail extends Model {
 
         return null;
     }
+
     public static function getEmails() {
-        /**
-         * Get all emails from session
-         * @return array
-         */
-        if (Session::has(self::SESSION_EMAILS)) {
-            $emails = json_decode(Session::get(self::SESSION_EMAILS), true);
-            return is_array($emails) ? $emails : [];
-        }
-        return [];
+        return self::purgeExpiredEmails();
     }
+
     public static function setEmail($email) {
-        /**
-         * Set current email in session
-         * @param string $email
-         */
         $emails = self::getEmails();
         if (in_array($email, $emails, true)) {
             Session::put(self::SESSION_EMAIL, $email);
         }
     }
+
     public static function removeEmail($email) {
-        /**
-         * Remove email from session
-         * @param string $email
-         */
+        self::destroyEmailData($email);
         $emails = self::getEmails();
         $key = array_search($email, $emails, true);
         if ($key !== false) {
             array_splice($emails, $key, 1);
         }
+        $timestamps = self::getEmailTimestamps();
+        unset($timestamps[$email]);
+        Session::put(self::SESSION_EMAILS_TIMESTAMPS, json_encode($timestamps));
+
         if ($emails) {
             self::setEmail($emails[0]);
             Session::put(self::SESSION_EMAILS, json_encode($emails));
@@ -393,25 +545,32 @@ class TMail extends Model {
     }
 
     /**
-     * this method is used to save emails
+     * this method is used to save emails (enforces max 3 emails and 60-min expiry tracking)
      */
-
     private static function storeEmail($email) {
-        /**
-         * Store email in session and log
-         * @param string $email
-         */
         Log::create([
             'ip' => request()->ip(),
             'email' => $email
         ]);
-        Session::put(self::SESSION_EMAIL, $email);
-        $emails = self::getEmails();
+
+        $emails = self::purgeExpiredEmails();
+        $timestamps = self::getEmailTimestamps();
+
         if (!in_array($email, $emails, true)) {
+            // If already at max 3, rotate out the oldest mailbox to stay at limit 3
+            if (count($emails) >= self::MAX_USER_EMAILS) {
+                $oldest = array_shift($emails);
+                self::destroyEmailData($oldest);
+                unset($timestamps[$oldest]);
+            }
             self::incrementEmailStats();
             $emails[] = $email;
-            Session::put(self::SESSION_EMAILS, json_encode($emails));
+            $timestamps[$email] = now()->timestamp;
         }
+
+        Session::put(self::SESSION_EMAIL, $email);
+        Session::put(self::SESSION_EMAILS, json_encode(array_values($emails)));
+        Session::put(self::SESSION_EMAILS_TIMESTAMPS, json_encode($timestamps));
     }
     public static function createCustomEmailFull($email) {
         /**
@@ -419,7 +578,9 @@ class TMail extends Model {
          * @param string $email
          * @return string
          */
-        [$username, $domain] = explode('@', $email);
+        $parts = explode('@', $email, 2);
+        $username = $parts[0] ?? '';
+        $domain = $parts[1] ?? '';
         $min = (int) config('app.settings.custom.min');
         $max = (int) config('app.settings.custom.max');
         if (strlen($username) < $min || strlen($username) > $max) {

@@ -43,6 +43,10 @@ class Manage extends Component {
     }
 
     public function delete($theme) {
+        if ($theme === 'default' || $theme === $this->current) {
+            $this->error = __('You cannot delete the default or currently active theme.');
+            return;
+        }
         Storage::disk('themes')->deleteDirectory($theme);
         $this->mount();
     }

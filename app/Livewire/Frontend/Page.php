@@ -24,7 +24,7 @@ class Page extends Component {
         }
 
         if ($this->isBlog) {
-            $content = explode("[split]", $this->page->content);
+            $content = explode("[split]", $this->page->content ?? '');
             $posts = Util::getBlogs();
 
             return view('frontend.themes.' . $theme . '.components.page', [

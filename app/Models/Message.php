@@ -86,22 +86,25 @@ class Message extends Model {
             } else {
                 $obj['sender_email'] = $obj['sender_name'];
             }
-            $obj['timestamp'] = $message->created_at;
+            $obj['timestamp'] = $message->created_at ? $message->created_at->format('c') : date('c');
             $obj['date'] = $message->created_at->format(config('app.settings.date_format', 'd M Y h:i A'));
             $obj['datediff'] = $message->created_at->diffForHumans();
             $obj['id'] = $message->id;
             $obj['content'] = $content;
             $obj['attachments'] = [];
-            $domain = explode('@', $obj['sender_email'])[1];
-            $blocked = in_array($domain, config('app.settings.blocked_domains'));
+            $senderParts = explode('@', $obj['sender_email'], 2);
+            $domain = $senderParts[1] ?? '';
+            $blockedDomains = config('app.settings.blocked_domains');
+            $blocked = is_array($blockedDomains) && in_array($domain, $blockedDomains, true);
             if ($blocked) {
                 $obj['subject'] = __('Blocked');
                 $obj['content'] = __('Emails from') . ' ' . $domain . ' ' . __('are blocked by Admin');
             }
             // Check if in Allowed Domains
-            if (config('app.settings.allowed_domains', [])) {
-                $allowed = !in_array($domain, config('app.settings.allowed_domains', []), true);
-                if ($allowed) {
+            $allowedDomains = config('app.settings.allowed_domains');
+            if (!empty($allowedDomains) && is_array($allowedDomains)) {
+                $domainNotAllowed = !in_array($domain, $allowedDomains, true);
+                if ($domainNotAllowed) {
                     $obj['subject'] = __('Blocked');
                     $obj['content'] = __('Emails from') . ' ' . $domain . ' ' . __('are blocked by Admin');
                 }
@@ -109,7 +112,7 @@ class Message extends Model {
             if ($message->attachments && !$blocked) {
                 $attachments = json_decode($message->attachments);
                 foreach ($attachments as $id => $attachment) {
-                    $url = env('APP_URL') . '/tmp/attachments/' . $message->id . '/' . $attachment->filename;
+                    $url = asset('tmp/attachments/' . $message->id . '/' . $attachment->filename);
                     if (property_exists($attachment, 'content-id') && strpos($obj['content'], $attachment->{'content-id'}) !== false) {
                         $obj['content'] = str_replace('cid:' . $attachment->{'content-id'}, $url, $obj['content']);
                     } else {
@@ -122,6 +125,7 @@ class Message extends Model {
                     }
                 }
             }
+            $obj['content'] = \App\Services\TMail::proxyImages($obj['content']);
             array_push($response['data'], $obj);
             if (!$message->is_seen) {
                 array_push($response['notifications'], [

@@ -31,9 +31,11 @@ class SettingsRepository
         $value = $settings[$key]->value;
 
         try {
-            return @unserialize($value) !== false || $value === 'b:0;'
-                ? unserialize($value)
-                : $value;
+            if ($value === 'b:0;' || $value === serialize(false)) {
+                return false;
+            }
+            $unserialized = @unserialize($value);
+            return $unserialized !== false ? $unserialized : $value;
         } catch (\Throwable $e) {
             return $default;
         }

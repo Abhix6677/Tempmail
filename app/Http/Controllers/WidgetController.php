@@ -31,8 +31,17 @@ class WidgetController extends Controller {
             }
         }
         $emails = User::where('role', 7)->pluck('email');
-        Mail::to($emails)->send(new ContactForm($request->all()));
-        Session::flash('success', __('Email sent successfully! We will get back to you shortly.'));
+        if ($emails->isNotEmpty()) {
+            try {
+                Mail::to($emails)->send(new ContactForm($request->all()));
+                Session::flash('success', __('Email sent successfully! We will get back to you shortly.'));
+            } catch (\Throwable $e) {
+                \Log::error('Contact form email failed: ' . $e->getMessage());
+                Session::flash('error', __('Unable to deliver email at this moment. Please try again later.'));
+            }
+        } else {
+            Session::flash('error', __('No admin recipient configured.'));
+        }
         return redirect()->back();
     }
 }

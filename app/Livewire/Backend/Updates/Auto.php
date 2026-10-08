@@ -42,7 +42,7 @@ class Auto extends Component {
                 try {
                     $request = Http::get(base64_decode('aHR0cHM6Ly9wb3J0YWwudGhlaHAuaW4vYXBpL3VwZGF0ZS90bWFpbA') . '8', [
                         'purchase_code' => config('app.settings.license_key'),
-                        'domain' => $_SERVER['HTTP_HOST'],
+                        'domain' => request()->getHost() ?: ($_SERVER['HTTP_HOST'] ?? 'localhost'),
                         'version' => config('app.settings.version')
                     ]);
                     Storage::put('files.zip', $request->getBody());

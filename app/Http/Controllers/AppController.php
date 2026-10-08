@@ -96,6 +96,16 @@ class AppController extends Controller {
     }
 
     /**
+     * View message or redirect to mailbox.
+     */
+    public function message($messageId) {
+        if (config('app.settings.disable_mailbox_slug')) {
+            return redirect(Util::localizeRoute('home'));
+        }
+        return redirect(Util::localizeRoute('mailbox'));
+    }
+
+    /**
      * Render the main app view.
      */
     public function app() {
@@ -315,5 +325,60 @@ class AppController extends Controller {
         }
         $object->header = $header;
         return $object;
+    }
+
+    /**
+     * Proxy external images to bypass CORP / CORS restrictions and privacy blockers.
+     */
+    public function imageProxy(Request $request) {
+        $url = $request->query('url');
+        if (!$url || !filter_var($url, FILTER_VALIDATE_URL)) {
+            abort(404);
+        }
+
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        if (!in_array(strtolower($scheme), ['http', 'https'], true)) {
+            abort(400);
+        }
+
+        $cacheKey = 'img_proxy_' . md5($url);
+        $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
+
+        if (!$cached || !is_array($cached)) {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            $data = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            curl_close($ch);
+
+            if ($data === false || $httpCode < 200 || $httpCode >= 400) {
+                abort(404);
+            }
+
+            $contentType = $contentType ?: 'image/png';
+            $cached = [
+                'content_type' => $contentType,
+                'data' => base64_encode($data)
+            ];
+
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $cached, 86400);
+        }
+
+        $contentType = $cached['content_type'] ?? 'image/png';
+        $data = base64_decode($cached['data'] ?? '');
+
+        return response($data, 200, [
+            'Content-Type' => $contentType,
+            'Access-Control-Allow-Origin' => '*',
+            'Cross-Origin-Resource-Policy' => 'cross-origin',
+            'Cache-Control' => 'public, max-age=86400, stale-while-revalidate=604800',
+        ]);
     }
 }

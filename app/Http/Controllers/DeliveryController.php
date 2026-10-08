@@ -58,7 +58,10 @@ class DeliveryController extends Controller {
     }
 
     public function deleteMessage($message_id) {
-        Message::find($message_id)->delete();
+        $msg = Message::find($message_id);
+        if ($msg) {
+            $msg->delete();
+        }
         return response()->json([
             'success' => 'Message Deleted'
         ]);
@@ -92,7 +95,7 @@ class DeliveryController extends Controller {
         if (count($filters) == 0 || in_array('total_unique_ips', $filters)) {
             $record = Log::select('ip')->groupBy('ip')->orderByRaw('COUNT(*) DESC')->get();
             $data['total_unique_ips'] = $record->count();
-            $data['ip_with_most_usage'] = $record->first()->ip;
+            $data['ip_with_most_usage'] = $record->first() ? $record->first()->ip : '';
         }
         if (count($filters) == 0 || in_array('unread_messages', $filters)) {
             $data['unread_messages'] = Message::where('is_seen', false)->count();
@@ -109,7 +112,7 @@ class DeliveryController extends Controller {
             $data['total_pages'] = Page::count();
         }
         if (count($filters) == 0 || in_array('total_domains', $filters)) {
-            $data['total_domains'] = count(config('app.settings.domains'));
+            $data['total_domains'] = is_array(config('app.settings.domains')) ? count(config('app.settings.domains')) : 0;
         }
         if (count($filters) == 0 || in_array('version', $filters)) {
             $data['version'] = config('app.settings.version');

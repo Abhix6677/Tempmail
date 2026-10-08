@@ -6,6 +6,7 @@ use App\Models\Message;
 use Livewire\Component;
 use App\Services\TMail;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 
@@ -21,19 +22,71 @@ class App extends Component {
     public $retryCount = 0;
 
     public function mount() {
-        $this->email = TMail::getEmail();
+        $this->email = TMail::getEmail(true);
         $this->initial = false;
+        if ($this->email) {
+            $cached = Cache::get('tmail_inbox_' . md5($this->email))
+                ?: session()->get('tmail_messages_' . $this->email, []);
+            if (!empty($cached)) {
+                $this->messages = $cached;
+                $this->initial = true;
+            }
+        }
     }
 
     #[On('syncEmail')]
     public function syncEmail($email) {
+        if ($this->email === $email && !empty($this->messages)) {
+            return;
+        }
         $this->email = $email;
+        if ($this->email) {
+            $cached = Cache::get('tmail_inbox_' . md5($this->email))
+                ?: session()->get('tmail_messages_' . $this->email, []);
+            if (!empty($cached)) {
+                $this->messages = $cached;
+                $this->initial = true;
+            } else {
+                $this->messages = [];
+                $this->initial = false;
+            }
+        }
     }
 
     #[On('fetchMessages')]
-    public function fetch() {
+    public function fetch($force = false) {
         $this->error = '';
         $this->errorDetails = '';
+
+        if (!$this->email) {
+            $this->dispatch('stopLoader');
+            $this->dispatch('fetchCompleted');
+            $this->initial = true;
+            return;
+        }
+
+        // Smart throttle: if messages were fetched within the last 15 seconds,
+        // don't block the PHP thread with another 4-second IMAP round-trip unless $force is true
+        $cacheKey = 'tmail_last_fetch_' . md5($this->email);
+        $lastFetch = Cache::get($cacheKey);
+        if (!$force && $lastFetch && (microtime(true) - $lastFetch) < 15) {
+            $cached = Cache::get('tmail_inbox_' . md5($this->email), []);
+            if (!empty($cached)) {
+                $this->messages = $cached;
+            }
+            $this->dispatch('stopLoader');
+            $this->dispatch('fetchCompleted');
+            $this->initial = true;
+            return;
+        }
+
+        // CRITICAL: Release the session lock immediately before starting slow IMAP connection.
+        // In PHP with file sessions, an active session holds an exclusive flock on the session file.
+        // Releasing it here allows the user to click any route/page without waiting for IMAP!
+        if (session()->isStarted()) {
+            session()->save();
+        }
+
         try {
             $count = count($this->messages);
             $responses = [];
@@ -53,6 +106,10 @@ class App extends Component {
             }
             $this->deleted = [];
             $this->messages = array_merge($responses['to']['data'], $responses['cc']['data']);
+            if ($this->email) {
+                Cache::put('tmail_inbox_' . md5($this->email), $this->messages, 3600);
+                Cache::put($cacheKey, microtime(true), 60);
+            }
             $notifications = array_merge($responses['to']['notifications'], $responses['cc']['notifications']);
             if (count($notifications)) {
                 if ($this->overflow == false && count($this->messages) == $count) {
@@ -78,13 +135,13 @@ class App extends Component {
                 'email' => $this->email
             ]);
             $this->retryCount++;
-            
+
             // Extract actionable error message
             $message = $e->getMessage();
             if (Auth::check() && Auth::user()->role == 7) {
                 $this->errorDetails = $message;
             }
-            
+
             // Map common errors to user-friendly messages
             if (str_contains($message, 'not configured')) {
                 $this->error = __('Mail server is not configured');
@@ -103,6 +160,7 @@ class App extends Component {
             }
         } finally {
             $this->dispatch('stopLoader');
+            $this->dispatch('fetchCompleted');
             $this->dispatch('loadDownload');
             $this->initial = true;
         }
@@ -114,7 +172,7 @@ class App extends Component {
     public function retry() {
         $this->error = '';
         $this->errorDetails = '';
-        $this->dispatch('fetchMessages');
+        $this->fetch(true);
     }
 
     public function delete($messageId) {
@@ -128,6 +186,11 @@ class App extends Component {
                 $this->rrmdir($directory);
                 unset($this->messages[$key]);
             }
+        }
+        $this->messages = array_values($this->messages);
+        if ($this->email) {
+            Cache::put('tmail_inbox_' . md5($this->email), $this->messages, 3600);
+            Cache::forget('tmail_last_fetch_' . md5($this->email));
         }
     }
 

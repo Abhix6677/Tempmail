@@ -1,6 +1,6 @@
-<nav x-data="{ open: false }" class="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
+<nav x-data="{ open: false }" class="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 transition-colors duration-150">
     <!-- Primary Navigation Menu -->
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="w-full px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
             <div class="flex">
                 <!-- Logo -->
@@ -31,12 +31,21 @@
             </div>
 
             <div class="hidden sm:gap-3 sm:flex sm:items-center sm:ms-6">
+                <!-- Dark / Light Mode Toggle Button -->
                 <div x-data="{
-                    darkmode: localStorage.getItem('darkmode') == 'enabled' ? true : false,
-                }" class="text-xl cursor-pointer mt-2">
-                    <i onclick="enableDarkMode()" x-on:click="darkmode = true" x-show="!darkmode" class="hgi hgi-stroke hgi-moon-02"></i>
-                    <i onclick="disableDarkMode()" x-on:click="darkmode = false" x-show="darkmode" class="hgi hgi-stroke hgi-sun-03 text-yellow-500"></i>
+                    darkmode: document.documentElement.classList.contains('dark'),
+                    init() {
+                        window.addEventListener('darkmode-changed', (e) => {
+                            this.darkmode = e.detail.darkmode;
+                        });
+                    }
+                }" class="text-xl cursor-pointer">
+                    <button type="button" @click="toggleDarkMode()" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-center focus:outline-none" title="Toggle Theme">
+                        <i x-show="!darkmode" class="hgi hgi-stroke hgi-moon-02 text-gray-600 dark:text-gray-300 hover:text-gray-900"></i>
+                        <i x-show="darkmode" class="hgi hgi-stroke hgi-sun-03 text-yellow-500 hover:text-yellow-400"></i>
+                    </button>
                 </div>
+
                 <!-- Settings Dropdown -->
                 <div class="relative">
                     <x-dropdown align="right" width="48">
@@ -107,10 +116,17 @@
             <!-- Hamburger -->
             <div class="-me-2 flex gap-3 items-center sm:hidden">
                 <div x-data="{
-                    darkmode: localStorage.getItem('darkmode') == 'enabled' ? true : false,
-                }" class="text-xl cursor-pointer mt-2">
-                    <i onclick="enableDarkMode()" x-on:click="darkmode = true" x-show="!darkmode" class="hgi hgi-stroke hgi-moon-02"></i>
-                    <i onclick="disableDarkMode()" x-on:click="darkmode = false" x-show="darkmode" class="hgi hgi-stroke hgi-sun-03 text-yellow-500"></i>
+                    darkmode: document.documentElement.classList.contains('dark'),
+                    init() {
+                        window.addEventListener('darkmode-changed', (e) => {
+                            this.darkmode = e.detail.darkmode;
+                        });
+                    }
+                }" class="text-xl cursor-pointer">
+                    <button type="button" @click="toggleDarkMode()" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-center focus:outline-none" title="Toggle Theme">
+                        <i x-show="!darkmode" class="hgi hgi-stroke hgi-moon-02 text-gray-600 dark:text-gray-300"></i>
+                        <i x-show="darkmode" class="hgi hgi-stroke hgi-sun-03 text-yellow-500"></i>
+                    </button>
                 </div>
                 <button @click="open = ! open" class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-900 focus:outline-none focus:bg-gray-100 dark:focus:bg-gray-900 focus:text-gray-500 dark:focus:text-gray-400 transition duration-150 ease-in-out">
                     <svg class="size-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">

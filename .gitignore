@@ -44,4 +44,10 @@ page.html
 claude-gmail-alias-inbox-fix/
 manual_upload_package/
 vite_manifest_fix/
+/public/themes
+public/*.png
+/storage/app/route-list.json
+CoCalc File Graph.txt
+apply_audit*.cjs
+*.cjs
 

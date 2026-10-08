@@ -30,20 +30,11 @@ class SetupAdmin extends Command
         // Step 1: Enable user registration
         $this->info('Enabling user registration...');
         
-        $regSetting = Setting::where('key', 'user_registration')->first();
-        if ($regSetting) {
-            $value = unserialize($regSetting->value);
-            $value['enabled'] = true;
-            $regSetting->value = serialize($value);
-            $regSetting->save();
-            $this->info('User registration enabled.');
-        } else {
-            Setting::create([
-                'key' => 'user_registration',
-                'value' => serialize(['enabled' => true, 'require_email_verification' => false]),
-            ]);
-            $this->info('User registration setting created and enabled.');
-        }
+        $reg = Setting::pick('user_registration') ?: ['require_email_verification' => false];
+        $reg['enabled'] = true;
+        $reg['enable'] = true;
+        Setting::put('user_registration', $reg);
+        $this->info('User registration enabled.');
 
         // Step 2: Create admin user if none exists
         $name = $this->option('name');

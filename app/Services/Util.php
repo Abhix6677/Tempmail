@@ -26,7 +26,7 @@ class Util {
         try {
             $request = Http::get(base64_decode('aHR0cHM6Ly9wb3J0YWwudGhlaHAuaW4vYXBpL2NoZWNrL3RtYWls') . '8', [
                 'purchase_code' => config('app.settings.license_key'),
-                'domain' => $_SERVER['HTTP_HOST'],
+                'domain' => request()->getHost() ?: ($_SERVER['HTTP_HOST'] ?? 'localhost'),
             ]);
             $response = $request->object();
             if (isset($response->error)) {
@@ -106,10 +106,11 @@ class Util {
     }
 
     public static function deletePageMenuLink($page_id) {
-        $url = config('app.url');
         $page = Page::find($page_id);
-        $url = $url . '/' . $page->slug;
-        Menu::where('link', $url)->delete();
+        if ($page) {
+            $url = config('app.url') . '/' . $page->slug;
+            Menu::where('link', $url)->delete();
+        }
     }
 
     public static function generateRandomString($length = 10) {

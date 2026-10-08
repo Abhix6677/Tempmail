@@ -22,12 +22,12 @@ class CleanOldEmails extends Command
     /**
      * The console command description.
      */
-    protected $description = 'Delete all emails (temp_emails, received_emails, messages) older than 10 minutes';
+    protected $description = 'Delete all emails (temp_emails, received_emails, messages) older than 60 minutes';
 
     /**
      * The retention period in minutes.
      */
-    protected int $retentionMinutes = 10;
+    protected int $retentionMinutes = 60;
 
     /**
      * Execute the console command.
@@ -66,7 +66,7 @@ class CleanOldEmails extends Command
             $messageCount = $oldMessages->count();
 
             foreach ($oldMessages as $message) {
-                $directory = './tmp/attachments/' . $message->id . '/';
+                $directory = public_path('tmp/attachments/' . $message->id . '/');
                 if (is_dir($directory)) {
                     Util::rrmdir($directory);
                 }
@@ -104,7 +104,7 @@ class CleanOldEmails extends Command
 
 
                 // Clean up attachment directory
-                $directory = './tmp/attachments/';
+                $directory = public_path('tmp/attachments/');
                 if (is_dir($directory)) {
                     Util::rrmdir($directory);
                 }

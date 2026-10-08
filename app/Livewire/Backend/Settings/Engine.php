@@ -36,9 +36,7 @@ class Engine extends Component {
     }
 
     public function save() {
-        $setting = Setting::where('key', 'engine')->first();
-        $setting->value = serialize($this->state[$setting->key]);
-        $setting->save();
+        Setting::put('engine', $this->state['engine']);
         $this->dispatch('saved');
     }
 

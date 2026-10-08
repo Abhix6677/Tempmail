@@ -78,7 +78,7 @@ class CronController extends Controller {
             return;
         }
         $limit = 50;
-        $today = new \DateTimeImmutable($before);
+        $today = $before instanceof \DateTimeInterface ? \DateTimeImmutable::createFromInterface($before) : new \DateTimeImmutable($before);
         $connection = TMail::connectMailBox();
         $mailbox = $connection->getMailbox('INBOX');
         $messages = $mailbox->getMessages(new Before($today));

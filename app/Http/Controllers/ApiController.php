@@ -11,7 +11,7 @@ class APIController extends Controller {
 
     public function domains($key = '') {
         $keys = Setting::pick('api_keys');
-        if (in_array($key, $keys)) {
+        if (is_array($keys) && in_array($key, $keys)) {
             return Setting::pick('domains');
         } else {
             return abort(401);
@@ -20,7 +20,7 @@ class APIController extends Controller {
 
     public function email($email = '', $key = '') {
         $keys = Setting::pick('api_keys');
-        if (in_array($key, $keys)) {
+        if (is_array($keys) && in_array($key, $keys)) {
             if ($email) {
                 try {
                     $split = explode('@', $email);
@@ -44,7 +44,7 @@ class APIController extends Controller {
 
     public function messages($email = '', $key = '') {
         $keys = Setting::pick('api_keys');
-        if (in_array($key, $keys)) {
+        if (is_array($keys) && in_array($key, $keys)) {
             if ($email) {
                 try {
                     $data = [];
@@ -72,7 +72,7 @@ class APIController extends Controller {
 
     public function message($message_id = 0, $key = '') {
         $keys = Setting::pick('api_keys');
-        if (in_array($key, $keys)) {
+        if (is_array($keys) && in_array($key, $keys)) {
             if ($message_id) {
                 if (config('app.settings.engine') == 'delivery') {
                     return Message::find($message_id);
@@ -97,7 +97,7 @@ class APIController extends Controller {
 
     public function delete($message_id = 0, $key = '') {
         $keys = Setting::pick('api_keys');
-        if (in_array($key, $keys)) {
+        if (is_array($keys) && in_array($key, $keys)) {
             if ($message_id) {
                 if (config('app.settings.engine') == 'delivery') {
                     Message::find($message_id)->delete();
